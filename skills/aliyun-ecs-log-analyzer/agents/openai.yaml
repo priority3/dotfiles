@@ -1,0 +1,4 @@
+interface:
+  display_name: "Aliyun ECS 日志分析"
+  short_description: "Analyze Aliyun ECS logs (SSH/Cloud Assistant)"
+  default_prompt: "Use $aliyun-ecs-log-analyzer to analyze my Aliyun ECS server logs for errors, spikes, and suspicious activity."

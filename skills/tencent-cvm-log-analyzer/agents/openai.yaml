@@ -1,0 +1,4 @@
+interface:
+  display_name: "腾讯云 CVM 日志分析"
+  short_description: "Analyze Tencent CVM logs (SSH/TAT)"
+  default_prompt: "Use $tencent-cvm-log-analyzer to analyze my Tencent Cloud CVM server logs for errors, spikes, and suspicious activity."
