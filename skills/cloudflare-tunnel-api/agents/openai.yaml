@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloudflare Tunnel API"
+  short_description: "Configure Cloudflare Tunnel and DNS records for custom domains"
+  default_prompt: "Use this skill when the user wants to set up Cloudflare Tunnel, bind a domain/subdomain to a tunnel, or troubleshoot tunnel DNS/routing/certificate issues."
