@@ -1,5 +1,11 @@
 # Get `CF_API_TOKEN`, `ACCOUNT_ID`, `ZONE_ID`
 
+## Common Mistake (read first)
+
+- `CF_API_TOKEN` and tunnel `result.token` are different.
+- `CF_API_TOKEN` is for Cloudflare management API (`Authorization: Bearer ...`).
+- Tunnel `result.token` is only for running connector (`cloudflared tunnel run --token ...`).
+
 ## 1) Get `CF_API_TOKEN`
 
 ### Dashboard path
@@ -57,3 +63,5 @@ curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
 ```
 
 If `success: true`, token is valid.
+
+If verification fails with `Invalid format for Authorization header`, you likely used tunnel `result.token` by mistake.

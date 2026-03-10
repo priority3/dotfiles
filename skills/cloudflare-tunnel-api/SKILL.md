@@ -14,9 +14,16 @@ This skill must stay sanitized for sharing:
 - Do not hardcode real tokens, account IDs, zone IDs, domains, or tunnel names.
 - Use placeholders and environment variables only.
 
+## Token Type Guard (must read first)
+
+- `CF_API_TOKEN` is a Cloudflare API token created from dashboard (`My Profile` -> `API Tokens`).
+- `TUNNEL_TOKEN` is returned by tunnel create API (`result.token`) and is only for `cloudflared tunnel run --token ...`.
+- Do not use `TUNNEL_TOKEN` in `Authorization: Bearer ...` headers.
+- If `/user/tokens/verify` does not return `success: true`, stop and replace token before doing any API calls.
+
 ## Required Inputs
 
-- `CF_API_TOKEN`
+- `CF_API_TOKEN` (management API token, not tunnel run token)
 - `ACCOUNT_ID`
 - `ZONE_ID`
 - `DOMAIN` (example: `example.com`)
@@ -33,6 +40,22 @@ Verify token validity first:
 ```bash
 curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
   -H "Authorization: Bearer ${CF_API_TOKEN}" | jq
+```
+
+Expected: `success: true`.
+
+Optional check if you suspect you copied a tunnel run token by mistake:
+
+```bash
+python3 - <<'PY'
+import base64, json, os
+t = os.environ.get("CF_API_TOKEN", "")
+try:
+    j = json.loads(base64.b64decode(t + "==").decode())
+    print("Looks like TUNNEL_TOKEN payload:", j.keys())
+except Exception:
+    print("Not tunnel-token payload format (this is normal for CF_API_TOKEN)")
+PY
 ```
 
 ## API Workflow (Remote-managed Tunnel)
@@ -120,6 +143,7 @@ curl -I "https://${HOST}.${DOMAIN}"
   - Confirm hostname resolves to `<TUNNEL_ID>.cfargotunnel.com` (CNAME), not direct origin IP.
   - Confirm CNAME is proxied in Cloudflare (`proxied: true`).
 - `token invalid`:
+  - Ensure token is `CF_API_TOKEN` (management token), not `TUNNEL_TOKEN`.
   - Recreate token and verify with `/user/tokens/verify`.
 - `connection refused to origin`:
   - Check `ORIGIN_URL` locally on server.
