@@ -1,4 +1,4 @@
 interface:
   display_name: "Dark Fantasy Ultimate Engine"
-  short_description: "长篇小说续写、审稿、设定整理与账本维护"
-  default_prompt: "Use $dark-fantasy-ultimate-engine to continue, rewrite, audit, or organize a long-form novel while maintaining state cards, hook tracking, and the particle ledger."
+  short_description: "用于暗黑玄幻小说的正文续写、设定校验与账本维护工作流"
+  default_prompt: "使用 dark-fantasy-ultimate-engine 处理玄幻小说的续写、设定整理、质量审查和账本回填"
