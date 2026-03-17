@@ -1,0 +1,4 @@
+interface:
+  display_name: "Novel Writing Skill"
+  short_description: "用于长篇小说的正文续写、设定校验与账本维护工作流"
+  default_prompt: "使用 novel-writing-skill 处理长篇小说的续写、设定整理、质量审查和账本回填"
