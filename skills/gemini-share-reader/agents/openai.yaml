@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gemini Share Reader"
+  short_description: "Extract chats from Gemini share URLs quickly"
+  default_prompt: "Use $gemini-share-reader to read this Gemini share URL and return the conversation in markdown."
