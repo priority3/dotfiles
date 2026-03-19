@@ -1,0 +1,4 @@
+interface:
+  display_name: "番茄作者 API 工作流"
+  short_description: "番茄作者后台接口与草稿保存工作流"
+  default_prompt: "Use $fanqie-author-api to manage Fanqie author drafts, volume updates, and related API workflows with secure env layering."
