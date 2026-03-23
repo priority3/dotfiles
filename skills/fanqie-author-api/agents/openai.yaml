@@ -1,4 +1,4 @@
 interface:
-  display_name: "番茄作者 API 工作流"
-  short_description: "番茄作者后台接口与草稿保存工作流"
-  default_prompt: "Use $fanqie-author-api to manage Fanqie author drafts, volume updates, and related API workflows with secure env layering."
+  display_name: "Fanqie Author API"
+  short_description: "用于番茄作者后台的草稿保存、列表查询与私密 env 路径索引"
+  default_prompt: "使用 fanqie-author-api 处理番茄作者后台的草稿保存、作品/分卷/章节查询，且把敏感 env 固定放在 ~/.ssh/fanqie"
