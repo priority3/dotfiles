@@ -1,6 +1,6 @@
 ---
 name: fanqie-author-api
-description: 适用于番茄作者后台 API 与草稿工作流。基于当前工作区的 fanqie/api-doc.md、scripts/fanqie-api.ts、scripts/fanqie-autosave.ts 执行书籍列表/卷列表/卷名修改、草稿列表/已发布章节列表查询、草稿新建与覆盖保存、保存历史，并按“项目级 .env.local 仅作上下文缓存、~/.ssh/fanqie/*.env 保存私密认证”的分层约定工作。触发词：番茄/Fanqie/番茄作者后台/草稿保存/cover_article/new_article/draft_list/chapter_list/volume_list/volume_modify/modify_volume/改卷名/book_list/book_detail/publish_article/add_volume。
+description: 适用于番茄作者后台 API 与草稿工作流。基于当前工作区的 fanqie/api-doc.md、scripts/fanqie-api.ts、scripts/fanqie-autosave.ts 执行书籍列表/卷列表/卷名修改、草稿列表/已发布章节列表查询、章节统计查询、草稿新建与覆盖保存、保存历史，并按“项目级 .env.local 仅作上下文缓存、~/.ssh/fanqie/*.env 保存私密认证”的分层约定工作。触发词：番茄/Fanqie/番茄作者后台/草稿保存/cover_article/new_article/draft_list/chapter_list/stats/chapter_list_v1/章节统计/跟读率/读完率/流失率/volume_list/volume_modify/modify_volume/改卷名/book_list/book_detail/publish_article/add_volume。
 ---
 
 # Fanqie Author API
@@ -83,7 +83,7 @@ description: 适用于番茄作者后台 API 与草稿工作流。基于当前�
 - 书籍、分卷、草稿、已发布章节查询：`scripts/fanqie-api.ts`
 - 分卷改名：`scripts/fanqie-api.ts volume-modify`
 - 一次性草稿保存、自动保存、cron 示例：`scripts/fanqie-autosave.ts`
-- 文档已知但当前脚本未封装：`publish_article/v0`、`add_volume/v0`
+- 文档已知但当前脚本未封装：`publish_article/v0`、`add_volume/v0`、`stats/chapter_list_v1/v0`
 
 ## 常用命令
 
@@ -189,11 +189,16 @@ node --experimental-strip-types scripts/fanqie-autosave.ts run \
    - 先用 `chapter_list/v1` 找到正式文章 `item_id`
    - 再按文档调用 `publish_article/v0`
    - 不要把草稿 `item_id` 和正式文章 `item_id` 混用
-7. 若是修改分卷名：
+7. 若是查询章节统计：
+   - 当前优先按文档调用原始 `stats/chapter_list_v1/v0`
+   - `stats_type=3` 重点看 `read_completion_rate`（章节读完率）与 `loss_rate`（章节流失率）
+   - `stats_type=4` 重点看 `follow_read_rate`（章节跟读率）
+   - 这些统计字段当前都按字符串返回，落库优先保留原始字符串
+8. 若是修改分卷名：
    - 先用 `volume_list/v1` 确认目标 `volume_id`
    - 再优先用 `scripts/fanqie-api.ts volume-modify`
    - `volume_data` 必须按 JSON 字符串传，不能拆成多个表单字段
-8. 若是新建分卷：
+9. 若是新建分卷：
    - 按文档调用 `add_volume/v0`
    - 若返回 `code = -4054`，先给现有空分卷创建至少 1 个章节，再重试
 
