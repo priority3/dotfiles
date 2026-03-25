@@ -189,16 +189,21 @@ node --experimental-strip-types scripts/fanqie-autosave.ts run \
    - 先用 `chapter_list/v1` 找到正式文章 `item_id`
    - 再按文档调用 `publish_article/v0`
    - 不要把草稿 `item_id` 和正式文章 `item_id` 混用
-7. 若是查询章节统计：
+7. 若是发布或改写正式章节：
+   - 在每次 `publish_article/v0` 返回成功后，必须再次调用 `chapter_list/v1` 回查目标 `volume_id` 的正式文章列表
+   - 至少核对受影响章节窗口中的 `item_id`、`title`、章号顺序是否与预期一致，不能只看单次接口成功日志
+   - 若本次是连续多章发布或顺延修正，必须确认正式列表里没有跳号、重号、倒序，再向用户汇报“已完成”
+   - 若正式列表短暂仍显示旧标题、`display_status=5` 或 `cant_modify_reason` 为“审核中暂不支持修改”，先等待数秒后重查，直到列表刷新或明确告知用户仍未收敛
+8. 若是查询章节统计：
    - 当前优先按文档调用原始 `stats/chapter_list_v1/v0`
    - `stats_type=3` 重点看 `read_completion_rate`（章节读完率）与 `loss_rate`（章节流失率）
    - `stats_type=4` 重点看 `follow_read_rate`（章节跟读率）
    - 这些统计字段当前都按字符串返回，落库优先保留原始字符串
-8. 若是修改分卷名：
+9. 若是修改分卷名：
    - 先用 `volume_list/v1` 确认目标 `volume_id`
    - 再优先用 `scripts/fanqie-api.ts volume-modify`
    - `volume_data` 必须按 JSON 字符串传，不能拆成多个表单字段
-9. 若是新建分卷：
+10. 若是新建分卷：
    - 按文档调用 `add_volume/v0`
    - 若返回 `code = -4054`，先给现有空分卷创建至少 1 个章节，再重试
 
@@ -222,6 +227,8 @@ node --experimental-strip-types scripts/fanqie-autosave.ts run \
 - `content` 提交的是 HTML，不是 Markdown。
 - 若脚本可用，不要手写 HTML 转换逻辑。
 - 标题要保持文件名、文内标题、平台标题一致。
+- `publish_article/v0` 返回 `code = 0` 只代表请求被后台接受，不代表正式文章列表已经刷新；结束前必须回查 `chapter_list/v1`。
+- 涉及正式章节发布时，要以正式文章列表中的最终顺序为准做结论，不能只依据单条成功日志。
 - 不要把缺少项目级 `FQ_BOOK_ID` / `FQ_VOLUME_NAME` 视为硬阻塞；这些值优先当作缓存，不在时应继续推导或查询。
 - 书籍 ID 与书名优先从项目根 `.env.local` 快速命中当前上下文；未命中时，再由 skill 主动查询，不要把仓库绑死在 env 上。
 - 若用户要做重复任务，优先在现有 TypeScript 脚本里补封装，而不是每次手写 `curl`。
