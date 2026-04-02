@@ -33,11 +33,41 @@ This skill must stay sanitized for sharing:
 
 If IDs are missing, read [references/get-cloudflare-values.md](references/get-cloudflare-values.md).
 
+## Default Credential Location
+
+Unless the user explicitly says otherwise, load Cloudflare management credentials from:
+
+- `~/.ssh/cloudfare/cf.env`
+
+Expected keys in that file:
+
+- `CF_API_TOKEN`
+- `ACCOUNT_ID`
+- `ZONE_ID`
+
+Recommended loading pattern:
+
+```bash
+set -a
+[ -f "$HOME/.ssh/cloudfare/cf.env" ] && . "$HOME/.ssh/cloudfare/cf.env"
+set +a
+```
+
+Behavior rules:
+
+- Prefer already-exported environment variables when present.
+- If any of `CF_API_TOKEN`, `ACCOUNT_ID`, or `ZONE_ID` is still missing after loading `~/.ssh/cloudfare/cf.env`, stop and tell the user which key is absent.
+- Do not print token values back to the user.
+
 ## Quick Verify
 
 Verify token validity first:
 
 ```bash
+set -a
+[ -f "$HOME/.ssh/cloudfare/cf.env" ] && . "$HOME/.ssh/cloudfare/cf.env"
+set +a
+
 curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
   -H "Authorization: Bearer ${CF_API_TOKEN}" | jq
 ```

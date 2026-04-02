@@ -1,5 +1,29 @@
 # Get `CF_API_TOKEN`, `ACCOUNT_ID`, `ZONE_ID`
 
+## Default Local Source
+
+This skill should first look for existing credentials at:
+
+- `~/.ssh/cloudfare/cf.env`
+
+Expected file shape:
+
+```bash
+CF_API_TOKEN=...
+ACCOUNT_ID=...
+ZONE_ID=...
+```
+
+Recommended load command:
+
+```bash
+set -a
+[ -f "$HOME/.ssh/cloudfare/cf.env" ] && . "$HOME/.ssh/cloudfare/cf.env"
+set +a
+```
+
+If those values are present there, reuse them instead of asking the user again.
+
 ## Common Mistake (read first)
 
 - `CF_API_TOKEN` and tunnel `result.token` are different.
