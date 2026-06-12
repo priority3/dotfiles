@@ -51,7 +51,11 @@ if [[ -z "$HEYUN_IP" || -z "$HEYUN_USER" || -z "$SSHPASS" ]]; then
   exit 1
 fi
 
-SSH_OPTS=(-p "$HEYUN_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
+# Reason: ControlMaster multiplexing lets consecutive commands reuse one TCP+auth
+# session (first call opens a master that lingers 5m), avoiding repeated
+# password handshakes during high-frequency triage runs.
+SSH_OPTS=(-p "$HEYUN_PORT" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10
+  -o ControlMaster=auto -o ControlPath="$HOME/.ssh/cm-%r@%h:%p" -o ControlPersist=5m)
 
 if [[ $# -eq 0 ]]; then
   exec sshpass -e ssh "${SSH_OPTS[@]}" "$HEYUN_USER@$HEYUN_IP"
