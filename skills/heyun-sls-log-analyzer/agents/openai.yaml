@@ -1,0 +1,4 @@
+interface:
+  display_name: "heyun SLS 日志分析"
+  short_description: "Analyze heyun SLS server logs (SSH password auth)"
+  default_prompt: "Use $heyun-sls-log-analyzer to analyze my heyun SLS server logs for errors, spikes, and suspicious activity."
