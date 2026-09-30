@@ -1,0 +1,14 @@
+# 环境与密钥 —— 绝不入库
+.env
+.env.local
+*.env
+
+# 运行产物
+outputs/
+*.places.json
+*.places.geo.json
+
+# 系统
+.DS_Store
+__pycache__/
+*.pyc
