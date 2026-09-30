@@ -1,0 +1,14 @@
+{
+  "min_interval": 5,
+  "routes": ["system", "clash", "pool"],
+  "system_proxy": "",
+  "max_switches": 2,
+  "clash": {
+    "include": "",
+    "exclude": "🏠|剩余|到期|流量|官网|套餐|重置"
+  },
+  "pool": {
+    "files": ["~/Downloads/*proxies*.txt"],
+    "max_tries": 4
+  }
+}
