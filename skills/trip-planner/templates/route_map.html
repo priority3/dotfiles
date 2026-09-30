@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{CITY}} 行程地图 · trip-planner</title>
+<script>
+  // 高德安全密钥(2021-12-02 后申请的 JS API Key 必须配置)
+  // inject_route.py 从环境变量 AMAP_SECURITY 注入
+  window._AMapSecurityConfig = {
+    securityJsCode: "{{AMAP_SECURITY}}"
+  };
+</script>
+<script src="https://webapi.amap.com/maps?v=2.0&key={{AMAP_JS_KEY}}&plugin=AMap.Scale,AMap.ToolBar"></script>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1f2329;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #1565c0;
+    --shadow: 0 2px 10px rgba(0,0,0,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    grid-template-rows: 56px 1fr;
+    height: 100dvh;
+  }
+  header.topbar {
+    grid-column: 1 / span 2;
+    background: linear-gradient(90deg, #1565c0, #0d47a1);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    box-shadow: var(--shadow);
+    z-index: 10;
+  }
+  header.topbar h1 { font-size: 16px; font-weight: 600; margin: 0; flex: 1; }
+  header.topbar .meta { font-size: 12px; opacity: .85; }
+  aside.sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .filters {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+  }
+  .filters .title {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    letter-spacing: .5px;
+  }
+  .filters + .filters { border-top: none; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 14px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--ink);
+    transition: all .15s;
+    user-select: none;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .pill.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .pill.muted { opacity: .4; }
+  .pill .count { font-weight: 600; }
+  /* 按天 pill 用该天的路线色描边，与分类 pill 区分 */
+  .pill.day { border-width: 2px; }
+  .pill.day.active { color: #fff; }
+  .search { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+  .search input {
+    width: 100%;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    outline: none;
+  }
+  .search input:focus { border-color: var(--accent); }
+  .cards { flex: 1; overflow-y: auto; padding: 10px 12px; }
+  /* 每天的行程小结条 */
+  .dayhead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #fafbfc;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--muted);
+  }
+  .dayhead:first-child { margin-top: 0; }
+  .dayhead .dtitle { font-size: 13px; font-weight: 700; flex: 1; }
+  .dayhead .dmeta { font-size: 11px; color: var(--muted); }
+  .dayhead .dcost { font-size: 12px; font-weight: 700; color: #2e7d32; white-space: nowrap; }
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all .15s;
+    border-left: 4px solid var(--muted);
+  }
+  .card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+  .card.active { box-shadow: 0 0 0 2px var(--accent); }
+  .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  /* 站点序号徽标 */
+  .card .seq {
+    width: 20px; height: 20px; flex: 0 0 20px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #fff;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .card .name { font-size: 14px; font-weight: 600; flex: 1; }
+  .card .note { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 2px; }
+  .card .addr {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+  main.map-wrap { position: relative; overflow: hidden; }
+  #map { width: 100%; height: 100%; }
+  .legend {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(255,255,255,.95);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11px;
+    box-shadow: var(--shadow);
+    z-index: 5;
+    max-width: 220px;
+  }
+  .legend .title { font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+  .legend ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 8px;
+  }
+  .legend li { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .legend .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .legend .sep { grid-column: 1 / -1; border-top: 1px solid var(--border); margin: 4px 0 2px; }
+  .legend .line { width: 14px; height: 3px; border-radius: 2px; }
+  .amap-marker-label {
+    border: none !important;
+    background: rgba(31,35,41,.85) !important;
+    color: #fff !important;
+    padding: 2px 6px !important;
+    border-radius: 3px !important;
+    font-size: 11px !important;
+  }
+  .amap-info-content { border-radius: 8px !important; box-shadow: 0 4px 16px rgba(0,0,0,.12) !important; }
+  .iw-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .iw-addr { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .iw-note { font-size: 12px; color: var(--ink); line-height: 1.6; max-width: 240px; }
+  @media (max-width: 768px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr auto; }
+    header.topbar { grid-column: 1; grid-row: 1; padding: 0 12px; }
+    header.topbar h1 { font-size: 14px; }
+    header.topbar .meta { font-size: 11px; }
+    main.map-wrap { grid-column: 1; grid-row: 2; }
+    aside.sidebar {
+      grid-column: 1;
+      grid-row: 3;
+      border-right: none;
+      border-top: 1px solid var(--border);
+      max-height: 34vh;
+    }
+    .filters { padding: 6px 10px; }
+    .pills { gap: 4px; }
+    .pill { font-size: 11px; padding: 2px 8px; }
+    .search { padding: 4px 10px; }
+    .cards { padding: 6px 8px; max-height: 25vh; }
+    .card { padding: 6px 8px; margin-bottom: 4px; }
+    .card .name { font-size: 13px; }
+    .legend { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <h1>🗺️ {{CITY}} 行程地图</h1>
+    <div class="meta">{{DATE_RANGE}} · {{TOTAL}} 个地点</div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="filters" id="dayFilters" style="display:none">
+      <div class="title">按天筛选(点击切换)</div>
+      <div class="pills" id="dayPills"></div>
+    </div>
+    <div class="filters">
+      <div class="title">分类筛选(点击切换)</div>
+      <div class="pills" id="pills"></div>
+    </div>
+    <div class="search">
+      <input id="searchInput" placeholder="🔍 搜索地点名 / 地址 / 备注..." />
+    </div>
+    <div class="cards" id="cards"></div>
+  </aside>
+
+  <main class="map-wrap">
+    <div id="map"></div>
+    <div class="legend" id="legend">
+      <div class="title">图例</div>
+      <ul id="legendList"></ul>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   TRIP_DATA 注入区(agent 抽取地点 + geocode.py + inject_route.py 生成)
+
+   places[]  每项可带 day(第几天) 与 order(当天第几站)；两者缺省即为「备选点」
+   routes[]  每天一条，stops 按顺序引用 places[].id
+   ============================================================ */
+const TRIP_DATA = {
+  city: "{{CITY}}",
+  date_range: "{{DATE_RANGE}}",
+  center: [{{CENTER_LNG}}, {{CENTER_LAT}}], // [lng, lat] 高德默认 GCJ-02
+  zoom: {{ZOOM}},
+  places: {{PLACES_JSON}},
+  routes: {{ROUTES_JSON}}
+};
+
+/* ============================================================
+   11 类配色与中文名
+   ============================================================ */
+const CATEGORIES = {
+  C: { name: "演唱会", color: "#d32f2f" },
+  S: { name: "球赛",   color: "#7b1fa2" },
+  M: { name: "集市",   color: "#f9a825" },
+  U: { name: "博物馆", color: "#1565c0" },
+  5: { name: "5A景区", color: "#e65100" },
+  H: { name: "喜茶",   color: "#ec407a" },
+  F: { name: "美食街", color: "#ad1457" },
+  W: { name: "City Walk", color: "#00838f" },
+  L: { name: "购物中心", color: "#4527a0" },
+  D: { name: "地铁站", color: "#546e7a" },
+  T: { name: "优惠门票", color: "#2e7d32" },
+  A: { name: "住宿",   color: "#5d4037" },
+  X: { name: "交通枢纽", color: "#37474f" }
+};
+
+// 按天的路线配色，超出长度后循环复用
+const DAY_COLORS = ["#1565c0", "#e65100", "#2e7d32", "#7b1fa2", "#c2185b", "#00838f", "#f9a825"];
+const NO_DAY = 0;  // 不属于任何一天的备选点
+
+/* ============================================================
+   全局状态
+   ============================================================ */
+let map = null;
+let markers = {};      // id -> AMap.Marker
+let polylines = [];    // AMap.Polyline，带 __day 标记
+let activeId = null;
+let activeCats = new Set(Object.keys(CATEGORIES));
+let activeDays = new Set();
+// 有 routes 时才启用按天维度；否则整份行为退化为普通散点图
+const HAS_ROUTES = Array.isArray(TRIP_DATA.routes) && TRIP_DATA.routes.length > 0;
+
+function dayOf(p) {
+  const d = parseInt(p.day, 10);
+  return Number.isFinite(d) && d > 0 ? d : NO_DAY;
+}
+
+function dayColor(day) {
+  if (day === NO_DAY) return "#9e9e9e";
+  return DAY_COLORS[(day - 1) % DAY_COLORS.length];
+}
+
+function allDays() {
+  const days = new Set(TRIP_DATA.places.map(dayOf));
+  (TRIP_DATA.routes || []).forEach(r => days.add(parseInt(r.day, 10) || NO_DAY));
+  return [...days].sort((a, b) => a - b);
+}
+
+function routeOf(day) {
+  return (TRIP_DATA.routes || []).find(r => (parseInt(r.day, 10) || NO_DAY) === day);
+}
+
+/* ============================================================
+   初始化
+   ============================================================ */
+function init() {
+  map = new AMap.Map("map", {
+    zoom: TRIP_DATA.zoom || 12,
+    center: TRIP_DATA.center,
+    viewMode: "2D",
+    resizeEnable: true
+  });
+  map.addControl(new AMap.Scale());
+  map.addControl(new AMap.ToolBar({ position: "RB" }));
+
+  activeDays = new Set(allDays());
+
+  const ok = TRIP_DATA.places.filter(p => p.lat && p.lng && !isNaN(p.lat) && !isNaN(p.lng)).length;
+  const total = TRIP_DATA.places.length;
+  const meta = document.querySelector("header.topbar .meta");
+  if (meta) {
+    const dayCount = allDays().filter(d => d !== NO_DAY).length;
+    const dayPart = HAS_ROUTES ? ` · ${dayCount} 天行程` : "";
+    meta.textContent = `${TRIP_DATA.date_range} · ${ok}/${total} 已定位${dayPart}`;
+  }
+
+  renderMarkers();
+  renderRoutes();
+  renderDayPills();
+  renderPills();
+  renderLegend();
+  renderCards();
+  bindSearch();
+
+  // Reason: 用 complete 事件而非固定延时 —— 覆盖物就绪时间随网络波动，
+  // 固定 setTimeout 可能在标记还没上图时就 fitView，视野就不对了。
+  // 再留一个兜底延时，防某些环境下 complete 不触发。
+  map.on("complete", () => fitAllMarkers());
+  setTimeout(() => fitAllMarkers(), 800);
+
+  if (ok === 0) {
+    showBanner("⚠️ 所有地点都没有坐标。请先用 geocode.py 预编码后再生成 HTML。", "error");
+  } else if (ok < total) {
+    console.info(`[map] ${total - ok} 个地点无坐标(已隐藏),用 F12 控制台查看详情`);
+  }
+
+  // 路线里引用了未定位的站点时提示，否则连线会莫名断开
+  if (HAS_ROUTES) {
+    const broken = [];
+    TRIP_DATA.routes.forEach(r => {
+      (r.stops || []).forEach(sid => {
+        const p = TRIP_DATA.places.find(x => String(x.id) === String(sid));
+        if (!p) broken.push(`${sid}(无此地点)`);
+        else if (!p.lat || !p.lng || isNaN(p.lat) || isNaN(p.lng)) broken.push(p.name);
+      });
+    });
+    if (broken.length) {
+      showBanner(`路线中 ${broken.length} 个站点未定位，连线已跳过：${broken.slice(0, 3).join("、")}${broken.length > 3 ? " 等" : ""}`, "warn");
+    }
+  }
+
+  const firstPlace = TRIP_DATA.places.find(p => p.lat && p.lng);
+  if (firstPlace) {
+    const [clng, clat] = TRIP_DATA.center;
+    const isNearBeijing = Math.abs(clng - 116.4) < 0.5 && Math.abs(clat - 39.9) < 0.5;
+    const placeFarFromCenter = Math.abs(firstPlace.lat - clat) > 3 || Math.abs(firstPlace.lng - clng) > 3;
+    if (isNearBeijing && placeFarFromCenter) {
+      showBanner("⚠️ 地图中心可能是回退值(北京),与地点坐标不匹配。请检查 inject_route.py 的 center 计算。", "warn");
+    }
+  }
+}
+
+function showBanner(msg, level) {
+  const colors = {
+    warn: { bg: "#fff3e0", border: "#ff9800", icon: "⚠️" },
+    error: { bg: "#ffebee", border: "#c62828", icon: "❌" },
+    info: { bg: "#e3f2fd", border: "#1565c0", icon: "ℹ️" }
+  };
+  const c = colors[level] || colors.info;
+  const ttl = level === "error" ? 0 : 4000;
+  let banner = document.getElementById("__banner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "__banner";
+    banner.style.cssText = "position:fixed;top:64px;left:50%;transform:translateX(-50%);" +
+      "max-width:90%;padding:12px 16px;border-radius:8px;font-size:13px;line-height:1.6;" +
+      "box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:1000;white-space:pre-line;font-family:ui-monospace,Menlo,Consolas,monospace;";
+    document.body.appendChild(banner);
+  }
+  if (banner.__timer) { clearTimeout(banner.__timer); banner.__timer = null; }
+  banner.style.background = c.bg;
+  banner.style.border = `2px solid ${c.border}`;
+  banner.textContent = `${c.icon} ${msg}`;
+  banner.style.display = "block";
+  if (ttl > 0) {
+    banner.__timer = setTimeout(() => { banner.style.display = "none"; banner.__timer = null; }, ttl);
+  }
+}
+
+/* ============================================================
+   渲染 markers
+   ============================================================ */
+function renderMarkers() {
+  Object.values(markers).forEach(m => map.remove(m));
+  markers = {};
+
+  TRIP_DATA.places.forEach(p => {
+    if (!p.lat || !p.lng) return;
+    const cat = CATEGORIES[p.type] || { color: "#666", name: p.type };
+    // 行程内的站点显示当天序号，备选点仍显示分类字母
+    const label = (HAS_ROUTES && p.order) ? String(p.order) : String(p.type || "");
+    const marker = new AMap.Marker({
+      position: [p.lng, p.lat],
+      title: p.name,
+      offset: new AMap.Pixel(-11, -11),
+      content: buildMarkerContent(cat.color, label, dayOf(p)),
+      label: {
+        content: `<span style="background:${cat.color}">${p.name}</span>`,
+        direction: "top",
+        offset: new AMap.Pixel(0, -4)
+      }
+    });
+    marker.on("click", () => selectPlace(p.id));
+    marker.on("mouseover", () => marker.setLabel({
+      content: `<span style="background:${cat.color}">${p.name}</span>`,
+      direction: "top"
+    }));
+    marker.on("mouseout", () => marker.setLabel({ content: "" }));
+    markers[p.id] = marker;
+    map.add(marker);
+  });
+  applyFilters();
+}
+
+function buildMarkerContent(color, label, day) {
+  // 行程站点额外套一圈当天的路线色描边，肉眼可辨属于哪一天
+  const ring = (day && day !== NO_DAY)
+    ? `box-shadow:0 0 0 2px ${dayColor(day)},0 1px 4px rgba(0,0,0,.4);`
+    : `box-shadow:0 1px 4px rgba(0,0,0,.4);`;
+  return `<div style="
+    width:22px;height:22px;border-radius:50% 50% 50% 0;
+    background:${color};transform:rotate(-45deg);
+    border:2px solid #fff;${ring}
+    display:flex;align-items:center;justify-content:center;
+  "><span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700;">${label}</span></div>`;
+}
+
+/* ============================================================
+   路线连线
+   ============================================================ */
+function renderRoutes() {
+  polylines.forEach(pl => map.remove(pl));
+  polylines = [];
+  if (!HAS_ROUTES) return;
+
+  TRIP_DATA.routes.forEach(route => {
+    const day = parseInt(route.day, 10) || NO_DAY;
+    const path = (route.stops || [])
+      .map(sid => TRIP_DATA.places.find(p => String(p.id) === String(sid)))
+      .filter(p => p && p.lat && p.lng && !isNaN(p.lat) && !isNaN(p.lng))
+      .map(p => [p.lng, p.lat]);
+    if (path.length < 2) return;   // 单点无法连线
+
+    const line = new AMap.Polyline({
+      path: path,
+      strokeColor: dayColor(day),
+      strokeWeight: 5,
+      strokeOpacity: 0.75,
+      strokeStyle: "solid",
+      showDir: true,            // 沿线箭头，体现行进方向
+      lineJoin: "round",
+      lineCap: "round",
+      zIndex: 50
+    });
+    line.__day = day;
+    polylines.push(line);
+    map.add(line);
+  });
+}
+
+/* ============================================================
+   筛选：按天 × 按分类，两个维度是 AND 关系
+   ============================================================ */
+function renderDayPills() {
+  if (!HAS_ROUTES) return;
+  const box = document.getElementById("dayFilters");
+  const wrap = document.getElementById("dayPills");
+  box.style.display = "";
+  wrap.innerHTML = "";
+
+  const days = allDays();
+  const counts = {};
+  TRIP_DATA.places.forEach(p => { const d = dayOf(p); counts[d] = (counts[d] || 0) + 1; });
+
+  const all = document.createElement("div");
+  all.className = "pill" + (activeDays.size === days.length ? " active" : "");
+  all.innerHTML = `📅 全部 <span class="count">${TRIP_DATA.places.length}</span>`;
+  all.onclick = () => {
+    if (activeDays.size === days.length) activeDays.clear();
+    else days.forEach(d => activeDays.add(d));
+    refreshAll();
+  };
+  wrap.appendChild(all);
+
+  days.forEach(day => {
+    const color = dayColor(day);
+    const route = routeOf(day);
+    const label = day === NO_DAY ? "备选" : (route && route.name ? `D${day} ${route.name}` : `Day ${day}`);
+    const pill = document.createElement("div");
+    pill.className = "pill day" + (activeDays.has(day) ? " active" : " muted");
+    pill.style.borderColor = color;
+    if (activeDays.has(day)) pill.style.background = color;
+    pill.innerHTML = `${escapeHtml(label)} <span class="count">${counts[day] || 0}</span>`;
+    pill.onclick = () => {
+      if (activeDays.has(day)) activeDays.delete(day); else activeDays.add(day);
+      refreshAll();
+    };
+    wrap.appendChild(pill);
+  });
+}
+
+function refreshAll() {
+  renderDayPills();
+  renderPills();
+  applyFilters();
+  renderCards(document.getElementById("searchInput").value || "");
+}
+
+function renderPills() {
+  const counts = {};
+  Object.keys(CATEGORIES).forEach(k => counts[k] = 0);
+  TRIP_DATA.places.forEach(p => { counts[p.type] = (counts[p.type] || 0) + 1; });
+
+  const wrap = document.getElementById("pills");
+  wrap.innerHTML = "";
+
+  const all = document.createElement("div");
+  all.className = "pill" + (activeCats.size === Object.keys(CATEGORIES).length ? " active" : "");
+  all.innerHTML = `🎯 全部 <span class="count">${TRIP_DATA.places.length}</span>`;
+  all.onclick = () => {
+    if (activeCats.size === Object.keys(CATEGORIES).length) activeCats.clear();
+    else Object.keys(CATEGORIES).forEach(k => activeCats.add(k));
+    refreshAll();
+  };
+  wrap.appendChild(all);
+
+  Object.keys(CATEGORIES).forEach(key => {
+    const cat = CATEGORIES[key];
+    if (counts[key] === 0) return;
+    const pill = document.createElement("div");
+    pill.className = "pill" + (activeCats.has(key) ? " active" : " muted");
+    pill.innerHTML = `<span class="dot" style="background:${cat.color}"></span>${cat.name} <span class="count">${counts[key]}</span>`;
+    pill.onclick = () => {
+      if (activeCats.has(key)) activeCats.delete(key); else activeCats.add(key);
+      refreshAll();
+    };
+    wrap.appendChild(pill);
+  });
+}
+
+function isVisible(p) {
+  if (!activeCats.has(p.type)) return false;
+  if (HAS_ROUTES && !activeDays.has(dayOf(p))) return false;
+  return true;
+}
+
+function applyFilters() {
+  Object.entries(markers).forEach(([id, m]) => {
+    const p = TRIP_DATA.places.find(x => String(x.id) === String(id));
+    if (!p) return;
+    // AMap 2.0 Marker 没有 setVisible,用 show/hide
+    if (isVisible(p)) m.show(); else m.hide();
+  });
+  polylines.forEach(pl => {
+    if (activeDays.has(pl.__day)) pl.show(); else pl.hide();
+  });
+}
+
+/* ============================================================
+   图例
+   ============================================================ */
+function renderLegend() {
+  const ul = document.getElementById("legendList");
+  ul.innerHTML = "";
+  const used = new Set(TRIP_DATA.places.map(p => p.type));
+  Object.entries(CATEGORIES).forEach(([key, cat]) => {
+    if (!used.has(key)) return;
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="dot" style="background:${cat.color}"></span>${cat.name}`;
+    ul.appendChild(li);
+  });
+  if (!HAS_ROUTES) return;
+
+  const sep = document.createElement("li");
+  sep.className = "sep";
+  ul.appendChild(sep);
+  allDays().filter(d => d !== NO_DAY).forEach(day => {
+    const route = routeOf(day);
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="line" style="background:${dayColor(day)}"></span>${escapeHtml(route && route.name ? route.name : "Day " + day)}`;
+    ul.appendChild(li);
+  });
+}
+
+/* ============================================================
+   卡片列表：有行程时按天分组并显示站序，否则平铺
+   ============================================================ */
+function renderCards(filter = "") {
+  const wrap = document.getElementById("cards");
+  wrap.innerHTML = "";
+  const f = filter.trim().toLowerCase();
+
+  const list = TRIP_DATA.places.filter(p => {
+    if (!isVisible(p)) return false;
+    if (!f) return true;
+    const hay = `${p.name} ${p.address || ""} ${p.note || ""}`.toLowerCase();
+    return hay.includes(f);
+  });
+
+  if (list.length === 0) {
+    wrap.innerHTML = `<div class="empty">无匹配地点</div>`;
+    return;
+  }
+
+  if (!HAS_ROUTES) {
+    list.forEach(p => wrap.appendChild(buildCard(p)));
+    return;
+  }
+
+  // 按天分组，天内按 order 排序
+  const groups = new Map();
+  list.forEach(p => {
+    const d = dayOf(p);
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d).push(p);
+  });
+  [...groups.keys()].sort((a, b) => a - b).forEach(day => {
+    const items = groups.get(day).sort((a, b) => (a.order || 99) - (b.order || 99));
+    wrap.appendChild(buildDayHead(day, items.length));
+    items.forEach(p => wrap.appendChild(buildCard(p)));
+  });
+}
+
+function buildDayHead(day, count) {
+  const route = routeOf(day);
+  const color = dayColor(day);
+  const head = document.createElement("div");
+  head.className = "dayhead";
+  head.style.borderLeftColor = color;
+  const title = day === NO_DAY ? "备选地点" : (route && route.name ? `Day ${day} · ${route.name}` : `Day ${day}`);
+  const bits = [`${count} 站`];
+  if (route && route.transport) bits.push(escapeHtml(route.transport));
+  head.innerHTML = `
+    <div style="flex:1">
+      <div class="dtitle" style="color:${color}">${escapeHtml(title)}</div>
+      <div class="dmeta">${bits.join(" · ")}</div>
+    </div>
+    ${route && route.cost ? `<div class="dcost">¥${escapeHtml(String(route.cost))}</div>` : ""}
+  `;
+  return head;
+}
+
+function buildCard(p) {
+  const cat = CATEGORIES[p.type] || { color: "#999", name: p.type };
+  const card = document.createElement("div");
+  card.className = "card" + (p.id === activeId ? " active" : "");
+  card.style.borderLeftColor = HAS_ROUTES && dayOf(p) !== NO_DAY ? dayColor(dayOf(p)) : cat.color;
+  card.dataset.id = p.id;
+  const seq = (HAS_ROUTES && p.order)
+    ? `<span class="seq" style="background:${dayColor(dayOf(p))}">${escapeHtml(String(p.order))}</span>`
+    : "";
+  card.innerHTML = `
+    <div class="head">
+      ${seq}
+      <span class="badge" style="background:${cat.color}">${cat.name}</span>
+      <span class="name">${escapeHtml(p.name)}</span>
+    </div>
+    ${p.note ? `<div class="note">${escapeHtml(p.note)}</div>` : ""}
+    ${p.address ? `<div class="addr">📍 ${escapeHtml(p.address)}</div>` : ""}
+  `;
+  card.onclick = () => selectPlace(p.id);
+  return card;
+}
+
+function bindSearch() {
+  const input = document.getElementById("searchInput");
+  let timer;
+  input.oninput = (e) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => renderCards(e.target.value), 150);
+  };
+}
+
+/* ============================================================
+   双向联动:点击卡片 / 点击 marker
+   ============================================================ */
+function selectPlace(id) {
+  activeId = id;
+  const p = TRIP_DATA.places.find(x => String(x.id) === String(id));
+  if (!p) return;
+  const cat = CATEGORIES[p.type] || { color: "#999", name: p.type };
+
+  document.querySelectorAll(".card").forEach(c => {
+    c.classList.toggle("active", c.dataset.id == id);
+    if (c.dataset.id == id) c.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
+  if (p.lat && p.lng && !isNaN(p.lat) && !isNaN(p.lng)) {
+    map.setZoomAndCenter(15, [p.lng, p.lat]);
+    const day = dayOf(p);
+    const route = routeOf(day);
+    const dayTag = (HAS_ROUTES && day !== NO_DAY)
+      ? `<span style="color:${dayColor(day)};font-weight:700">Day ${day}${p.order ? " · 第 " + p.order + " 站" : ""}</span>${route && route.name ? " · " + escapeHtml(route.name) : ""}<br/>`
+      : "";
+    const info = new AMap.InfoWindow({
+      content: `<div style="padding:6px 4px;">
+        <div class="iw-title">${escapeHtml(p.name)}</div>
+        <div class="iw-addr">${dayTag}🏷️ ${cat.name}${p.address ? " · 📍 " + escapeHtml(p.address) : ""}</div>
+        ${p.note ? `<div class="iw-note">${escapeHtml(p.note)}</div>` : ""}
+      </div>`,
+      offset: new AMap.Pixel(0, -24)
+    });
+    info.open(map, [p.lng, p.lat]);
+  } else {
+    showBanner(`"${p.name}" 未定位(可能是演出名/线路编号等非地点条目,服务端地理编码时已跳过)`, "info");
+  }
+}
+
+/* ============================================================
+   视野适配
+   ============================================================ */
+function fitAllMarkers() {
+  const visibleMarkers = TRIP_DATA.places
+    .filter(p => p.lat && p.lng && isVisible(p))
+    .map(p => markers[p.id])
+    .filter(m => m);
+  if (visibleMarkers.length === 0) return;
+  if (visibleMarkers.length === 1) {
+    const pid = Object.entries(markers).find(([_, m]) => m === visibleMarkers[0])[0];
+    const p = TRIP_DATA.places.find(x => String(x.id) === String(pid));
+    if (p) map.setZoomAndCenter(14, [p.lng, p.lat]);
+    return;
+  }
+  // immediately=true 跳过动画（截图/慢机上更可靠），四周留 60px 边距免得标记贴边
+  map.setFitView(visibleMarkers, true, [60, 60, 60, 60]);
+}
+
+/* ============================================================
+   工具
+   ============================================================ */
+function escapeHtml(s) {
+  if (!s) return "";
+  return String(s).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[ch]);
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+if (typeof AMap === "undefined") {
+  document.getElementById("map").innerHTML =
+    `<div style="padding:30px;text-align:center;color:#d32f2f;">
+      ⚠️ 高德 JS API 加载失败。请检查网络连接或 API Key 配置。
+    </div>`;
+} else {
+  init();
+}
+</script>
+</body>
+</html>
