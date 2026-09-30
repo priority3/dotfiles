@@ -1,0 +1,4 @@
+interface:
+  display_name: "linux.do 阅读器"
+  short_description: "Read public LINUX DO topics and posts via RSS/pages with throttling and proxy failover"
+  default_prompt: "Use $linuxdo-reader to show me today's hot topics on linux.do and summarize the most discussed ones."
