@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 
+from ld_auth import auth_mode, curl_options
 from ld_config import HTTP_CACHE_DIR, RequestLock, State
 from ld_routes import Route, RoutePlanner, fmt_duration, log
 
@@ -88,17 +89,21 @@ def _last_headers(text: str) -> dict:
     return headers
 
 
-def run_curl(url: str, route: Route, cfg: dict, kind: str) -> _Raw:
+def run_curl(url: str, route: Route, cfg: dict, kind: str,
+             extra_options: list[tuple[str, str]] | None = None) -> _Raw:
     with tempfile.TemporaryDirectory(prefix="linuxdo-") as tmp:
         hdr_file, body_file = os.path.join(tmp, "headers"), os.path.join(tmp, "body")
         args = ["curl", "-sS", "-L", "--max-redirs", "3", "--compressed",
                 "-m", str(cfg["timeout"]), "--connect-timeout", "10",
                 "-A", cfg["user_agent"], "-H", f"Accept: {_ACCEPT[kind]}",
-                "-H", "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8",
+                "-H", "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8"] + (
+                ["-H", "Cookie: " + cfg["cookie"]] if cfg.get("cookie") else []) + [
                 "-D", hdr_file, "-o", body_file, "-w", "%{http_code} %{http_connect}",
                 "-K", "-", url]
-        # Reason: 代理 URL 可能带账号密码，经 stdin 的 curl 配置传入，不出现在 ps 能看到的命令行里
-        conf = f"proxy = {_curl_quote(route.proxy)}\n" if route.proxy else 'noproxy = "*"\n'
+        # Reason: 代理 URL 可能带账号密码、登录态是 API key，都经 stdin 的 curl 配置传入，不出现在 ps 能看到的命令行里
+        options = [("proxy", route.proxy)] if route.proxy else [("noproxy", "*")]
+        options += list(extra_options or [])
+        conf = "".join(f"{name} = {_curl_quote(value)}\n" for name, value in options)
         start = time.time()
         proc = subprocess.run(args, input=conf, capture_output=True, text=True)
         codes = (proc.stdout.split() + ["0", "0"])[:2]
@@ -161,12 +166,13 @@ def classify(raw: _Raw, route: Route, kind: str, cd: dict) -> tuple[str, float, 
     return "unexpected", cd["error"], f"HTTP {raw.code}"
 
 
-def _cache_file(url: str, kind: str):
-    return HTTP_CACHE_DIR / (hashlib.sha1(f"{kind} {url}".encode("utf-8")).hexdigest() + ".json")
+def _cache_file(url: str, kind: str, mode: str):
+    # 登录与匿名看到的内容不同，缓存按登录态分开
+    return HTTP_CACHE_DIR / (hashlib.sha1(f"{kind} {mode} {url}".encode("utf-8")).hexdigest() + ".json")
 
 
-def cache_get(url: str, kind: str, ttl: float) -> Response | None:
-    path = _cache_file(url, kind)
+def cache_get(url: str, kind: str, ttl: float, mode: str = "anon") -> Response | None:
+    path = _cache_file(url, kind, mode)
     try:
         age = time.time() - path.stat().st_mtime
         if age > ttl:
@@ -177,10 +183,10 @@ def cache_get(url: str, kind: str, ttl: float) -> Response | None:
     return Response(url, data["status"], data["body"], data["route"], cached=True, age=age)
 
 
-def cache_put(url: str, kind: str, resp: Response) -> None:
+def cache_put(url: str, kind: str, resp: Response, mode: str = "anon") -> None:
     HTTP_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     payload = {"url": url, "status": resp.status, "route": resp.route, "body": resp.body}
-    _cache_file(url, kind).write_text(json.dumps(payload, ensure_ascii=False), "utf-8")
+    _cache_file(url, kind, mode).write_text(json.dumps(payload, ensure_ascii=False), "utf-8")
     files = sorted(HTTP_CACHE_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime)
     for old in files[:-_CACHE_KEEP]:
         old.unlink(missing_ok=True)
@@ -189,8 +195,13 @@ def cache_put(url: str, kind: str, resp: Response) -> None:
 class Fetcher:
     """进程内唯一的请求入口：首次联网时才拿锁、载入状态、建线路规划器；close() 负责收尾。"""
 
-    def __init__(self, cfg: dict, only_route: str | None = None, use_cache: bool = True):
+    def __init__(self, cfg: dict, only_route: str | None = None, use_cache: bool = True, auth=None):
         self.cfg, self.only, self.use_cache = cfg, only_route, use_cache
+        # auth: ld_auth.load() 的登录态（None=匿名）。与 cfg["cookie"] 二者取或。
+        self.auth = auth
+        # Reason: 带登录态时不读缓存（否则会命中匿名时缓存的 404），也不写缓存
+        #（否则等级帖内容会被后续匿名请求读到）。
+        self.authed = bool(auth) or bool(cfg.get("cookie"))
         self.lock: RequestLock | None = None
         self.state: State | None = None
         self.planner: RoutePlanner | None = None
@@ -215,7 +226,7 @@ class Fetcher:
         url = path if path.startswith("http") else self.cfg["base_url"] + path
         short = url.replace(self.cfg["base_url"], "") or "/"
         ttl = self.cfg["cache_ttl"].get(kind, 0)
-        if self.use_cache and ttl:
+        if self.use_cache and ttl and not self.authed:
             hit = cache_get(url, kind, ttl)
             if hit:
                 log(f"GET {short} ← 缓存（{fmt_duration(hit.age)}前，经 {hit.route}）")
@@ -227,7 +238,7 @@ class Fetcher:
         last_site_outcome = ""
         for route in self.planner.candidates():
             self._pace()
-            raw = run_curl(url, route, self.cfg, kind)
+            raw = run_curl(url, route, self.cfg, kind, curl_options(self.auth))
             reached = raw.code != 0  # 拿到了 HTTP 响应 = 请求确实打到了 linux.do，计入节流
             if reached:
                 self.state.data["last_request_at"] = time.time()
@@ -237,7 +248,8 @@ class Fetcher:
                 log(f"GET {short} via {route.label} → 200（{raw.elapsed:.1f}s）")
                 self.state.save()
                 resp = Response(url, raw.code, raw.body, route.label)
-                cache_put(url, kind, resp)
+                if not self.authed:
+                    cache_put(url, kind, resp)
                 return resp
             if outcome in ("not_found", "forbidden"):
                 self.state.save()

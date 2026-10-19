@@ -24,6 +24,11 @@ HTTP_CACHE_DIR = CACHE_DIR / "http"
 CATEGORIES_FILE = CACHE_DIR / "categories.json"
 MIHOMO_HOME = CACHE_DIR / "mihomo"
 CLASH_VERGE_DIR = HOME / "Library" / "Application Support" / "io.github.clash-verge-rev.clash-verge-rev"
+# 登录凭证只放在配置目录（0600），永远不在仓库里
+CONFIG_DIR = CONFIG_FILE.parent
+AUTH_FILE = CONFIG_DIR / "auth.json"
+PENDING_AUTH_FILE = CONFIG_DIR / "auth-pending.json"
+COOKIE_FILE = CONFIG_DIR / "cookies.txt"
 
 # Reason: 实测 Cloudflare 只按客户端指纹拦（curl 放行、Python urllib 拦），UA 不影响放行；
 # 用浏览器 UA 是因为 Discourse 会据此返回带 data-preloaded JSON 的完整页面，比爬虫版 HTML 好解析。
@@ -40,6 +45,9 @@ DEFAULTS: dict = {
     "max_conn_failures": 6,
     "timeout": 25,
     "max_pages": 5,
+    # 留空 = 匿名访问（默认）。等级帖 / 私密分类需要登录态：用环境变量 LD_COOKIE 传入
+    # 浏览器里 linux.do 的 Cookie（至少要有 _t 和 _forum_session），不要写进配置文件。
+    "cookie": "",
     "cache_ttl": {"rss": 120, "html": 600},
     "cooldown": {
         "rate_limited": 900,
@@ -83,6 +91,8 @@ def load_config() -> dict:
         cfg["min_interval"] = float(env["LD_MIN_INTERVAL"])
     if env.get("LD_SYSTEM_PROXY"):
         cfg["system_proxy"] = env["LD_SYSTEM_PROXY"]
+    if env.get("LD_COOKIE"):
+        cfg["cookie"] = env["LD_COOKIE"].strip()
     cfg["min_interval"] = max(float(cfg["min_interval"]), MIN_INTERVAL_FLOOR)
     return cfg
 
@@ -163,16 +173,19 @@ class RequestLock:
             self._handle = None
 
 
-def load_categories(max_age: float = 86400) -> list[dict]:
+def load_categories(mode: str = "anon", max_age: float = 86400) -> list[dict]:
+    """分类表缓存；登录后能看到的分类比匿名多，所以按登录态（mode）区分。"""
     try:
         data = json.loads(CATEGORIES_FILE.read_text("utf-8"))
     except (OSError, ValueError):
         return []
-    return data.get("items", []) if time.time() - data.get("fetched_at", 0) < max_age else []
+    fresh = time.time() - data.get("fetched_at", 0) < max_age and data.get("mode", "anon") == mode
+    return data.get("items", []) if fresh else []
 
 
-def save_categories(items: list[dict]) -> None:
+def save_categories(items: list[dict], mode: str = "anon") -> None:
     if not items:
         return
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    CATEGORIES_FILE.write_text(json.dumps({"fetched_at": time.time(), "items": items}, ensure_ascii=False), "utf-8")
+    payload = {"fetched_at": time.time(), "mode": mode, "items": items}
+    CATEGORIES_FILE.write_text(json.dumps(payload, ensure_ascii=False), "utf-8")

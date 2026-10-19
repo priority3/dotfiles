@@ -6,6 +6,7 @@
   ld.py tag 纯水                  标签话题            ld.py user <用户名> [--topics]
   ld.py topic 2966557 [--page 2]  帖子正文（每页 20 楼，也接受完整链接）
   ld.py categories [--refresh]    分类列表            ld.py rss /badges/1/xxx.rss  任意 RSS 路径
+  ld.py login | logout | whoami   授权登录后可读按信任等级开放的板块（User API Key，只读）
   ld.py routes | doctor [--live] | reset [--cache]
 
 站内搜索页被 Cloudflare 整页拦截（与出口无关），搜索请用 WebSearch「site:linux.do 关键词」拿到话题 id 再 topic。
@@ -29,11 +30,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # Reason: 允许从任意工作目录调用
 
+import ld_auth  # noqa: E402
 from ld_config import (CATEGORIES_FILE, CONFIG_FILE, HTTP_CACHE_DIR, RequestLock, State,  # noqa: E402
                        load_categories, load_config, save_categories)
 from ld_fetch import EXIT_ALL_FAILED, EXIT_CHALLENGED, OUTCOME_ZH, FetchError, Fetcher  # noqa: E402
 from ld_mihomo import cleanup_stale, find_binary, find_source, running_pid  # noqa: E402
-from ld_parse import categories_from, clip, parse_feed, parse_preloaded, topic_from, topic_ref  # noqa: E402
+from ld_parse import (categories_from, clip, current_user_from, parse_feed, parse_preloaded,  # noqa: E402
+                      topic_from, topic_ref)
 from ld_routes import fmt_duration, load_pool, system_proxy  # noqa: E402
 
 
@@ -80,11 +83,12 @@ def run_feed(fx: Fetcher, cfg: dict, args, path: str) -> int:
 
 
 def fetch_categories(fx: Fetcher, refresh: bool = False) -> list[dict]:
-    cats = [] if refresh else load_categories()
+    mode = ld_auth.auth_mode(fx.auth)
+    cats = [] if refresh else load_categories(mode)
     if not cats:
         pre = parse_preloaded(fx.get("/categories", "html").body)
         cats = categories_from(pre) if pre else []
-        save_categories(cats)
+        save_categories(cats, mode)
     return cats
 
 
@@ -93,7 +97,7 @@ def category_path(fx: Fetcher, ref: str) -> str:
     ref = ref[2:] if ref.startswith("c/") else ref
     if re.fullmatch(r"[^/\s]+(?:/[^/\s]+)*/\d+", ref):  # 已经是 slug/id（或 父slug/子slug/id）
         return f"/c/{ref}.rss"
-    if ref.isdigit() and not load_categories():
+    if ref.isdigit() and not load_categories(ld_auth.auth_mode(fx.auth)):
         return f"/c/{ref}.rss"  # 只有 id 时服务端会 301 到规范地址，curl -L 会跟随，省一次拉分类表
     cats = fetch_categories(fx)
     for c in cats:
@@ -153,7 +157,7 @@ def cmd_topic(fx, cfg, args) -> int:
         current = topic_from(pre, cfg["base_url"]) if pre else None
         if current is None:
             break
-        save_categories(categories_from(pre))  # 顺手刷新分类缓存，category 命令就不用再联网
+        save_categories(categories_from(pre), ld_auth.auth_mode(fx.auth))  # 顺手刷新分类缓存，category 命令就不用再联网
         topic = topic or current
         topic["page"] = current["page"]
         posts.extend(current["posts"])
@@ -185,6 +189,71 @@ def cmd_categories(fx, cfg, args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- 登录态
+
+def whoami(fx: Fetcher, cfg: dict) -> dict | None:
+    """读首页内嵌的 currentUser 确认登录身份；不走缓存。"""
+    cached, fx.use_cache = fx.use_cache, False
+    try:
+        pre = parse_preloaded(fx.get("/", "html").body)
+    finally:
+        fx.use_cache = cached
+    return current_user_from(pre) if pre else None
+
+
+def _confirm_login(fx: Fetcher, cfg: dict) -> int:
+    fx.auth = ld_auth.load()
+    user = whoami(fx, cfg)
+    if not user:
+        print("[linuxdo] 凭证已保存，但 linux.do 没有认出登录身份：密文可能没粘贴完整，或 key 已失效", file=sys.stderr)
+        return 1
+    ld_auth.remember_user(user)
+    CATEGORIES_FILE.unlink(missing_ok=True)  # 登录后可见的分类不同，重新拉
+    print(f"✅ 已登录为 @{user['username']}（信任等级 TL{user['trust_level']}），后续命令自动带登录态")
+    return 0
+
+
+def cmd_login(fx, cfg, args) -> int:
+    try:
+        if args.cookie:
+            ld_auth.set_cookie(args.cookie)
+        elif args.payload:
+            ld_auth.finish(sys.stdin.read() if args.payload == "-" else args.payload)
+        else:
+            url = ld_auth.begin(cfg["base_url"])
+            print("1. 在【已登录 linux.do 的浏览器】里打开下面的链接，点「授权」：\n")
+            print(url)
+            print("\n2. 授权后页面会显示一段密文，复制整段，回来执行：")
+            print("   ld.py login --payload '<密文>'   （或 ld.py login --payload - 后从标准输入粘贴）")
+            print("\n本次只申请 read（只读）权限；以后可在 linux.do 偏好设置 →「应用」里撤销。")
+            return 0
+    except ld_auth.AuthError as exc:
+        print(f"[linuxdo] 登录失败：{exc}", file=sys.stderr)
+        return 1
+    return _confirm_login(fx, cfg)
+
+
+def cmd_logout(fx, cfg, args) -> int:
+    removed = ld_auth.logout()
+    CATEGORIES_FILE.unlink(missing_ok=True)
+    print(f"已清除本机 {removed} 个凭证文件。" if removed else "本机没有登录凭证。")
+    print(f"如需撤销授权，请到 {cfg['base_url']}/my/preferences/apps 删除「linuxdo-reader」。")
+    return 0
+
+
+def cmd_whoami(fx, cfg, args) -> int:
+    if not fx.auth:
+        print("未登录（匿名访问）。运行 ld.py login 授权后可读取按信任等级开放的板块。")
+        return 0
+    user = whoami(fx, cfg)
+    if user:
+        ld_auth.remember_user(user)
+        print(f"@{user['username']}（信任等级 TL{user['trust_level']}）· {ld_auth.describe(fx.auth)}")
+        return 0
+    print("[linuxdo] 本机有登录凭证，但 linux.do 没有认出来：key 可能已被撤销或失效，请重新 ld.py login", file=sys.stderr)
+    return 1
+
+
 # ---------------------------------------------------------------- 线路状态 / 自检 / 重置
 
 def _cool_desc(state: State, key: str, bucket: str = "routes") -> str:
@@ -199,6 +268,7 @@ def cmd_routes(fx, cfg, args) -> int:
     last = st.data["last_request_at"]
     print(f"线路顺序：{' → '.join(cfg['routes'])} · 节流 ≥{cfg['min_interval']:g}s/次"
           + (f" · 上次请求 {fmt_duration(time.time() - last)}前" if last else ""))
+    print(f"登录态：{ld_auth.describe(ld_auth.load())}")
     proxy = system_proxy(cfg)
     print(f"[system] {proxy or '未检测到系统代理，将直连'}  {_cool_desc(st, 'system' if proxy else 'direct')}")
     ccfg = cfg["clash"]
@@ -263,6 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--json", action="store_true", help="输出 JSON（全文不截断）")
     common.add_argument("--no-cache", action="store_true", help="跳过本地缓存")
     common.add_argument("--route", choices=["system", "direct", "clash", "pool"], help="只用指定线路")
+    common.add_argument("--anonymous", action="store_true", help="忽略本机登录态，以游客身份访问")
     listing = argparse.ArgumentParser(add_help=False)
     listing.add_argument("-n", "--limit", type=int, default=0, help="最多显示几条")
     listing.add_argument("--excerpt", type=int, default=120, help="摘要长度，0 不显示")
@@ -298,6 +369,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("categories", parents=[common])
     p.add_argument("--refresh", action="store_true", help="忽略缓存重新拉取")
     p.set_defaults(handler=cmd_categories)
+    p = sub.add_parser("login", parents=[common])
+    p.add_argument("--payload", help="授权页显示的密文；写 - 表示从标准输入读")
+    p.add_argument("--cookie", help="兜底：浏览器里 linux.do 的 _t cookie 值（会与浏览器争抢会话）")
+    p.set_defaults(handler=cmd_login)
+    sub.add_parser("logout", parents=[common]).set_defaults(handler=cmd_logout)
+    sub.add_parser("whoami", parents=[common]).set_defaults(handler=cmd_whoami)
     sub.add_parser("routes", parents=[common]).set_defaults(handler=cmd_routes)
     p = sub.add_parser("doctor", parents=[common])
     p.add_argument("--live", action="store_true", help="额外实测拉一次 /latest.rss")
@@ -329,7 +406,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config()
     # Reason: 收到 SIGTERM 时走正常退出流程，finally 才能停掉独立 mihomo、释放请求锁
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
-    fx = Fetcher(cfg, only_route=args.route, use_cache=not args.no_cache)
+    fx = Fetcher(cfg, only_route=args.route, use_cache=not args.no_cache,
+                 auth=None if args.anonymous else ld_auth.load())
     try:
         return args.handler(fx, cfg, args) or 0
     except FetchError as exc:

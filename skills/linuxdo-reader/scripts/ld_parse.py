@@ -250,6 +250,15 @@ def _decoded(pre: dict, key: str | None):
     return value
 
 
+def current_user_from(pre: dict) -> dict | None:
+    """登录后任意页面的 data-preloaded 里都有 currentUser；匿名时没有。"""
+    user = _decoded(pre, "currentUser")
+    if not isinstance(user, dict) or not user.get("username"):
+        return None
+    return {"username": user.get("username"), "name": user.get("name") or "",
+            "trust_level": user.get("trust_level")}
+
+
 def categories_from(pre: dict) -> list[dict]:
     site = _decoded(pre, "site") or {}
     return [{"id": c.get("id"), "slug": c.get("slug"), "name": c.get("name"),
