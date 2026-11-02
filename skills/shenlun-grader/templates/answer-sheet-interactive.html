@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>申论答题卡 · 可打字版</title>
+<style>
+  :root{
+    --bg:#f7f5f0;--surface:#fff;--line:#cfc8bb;--grid:#e0d9cd;--text:#2b2b28;
+    --text-2:#6b675e;--accent:#3f6b4f;--accent-2:#2f5340;--warn:#b4553f;--fill:#efece5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC",sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:20px 18px 60px}
+
+  /* 工具栏 */
+  .bar{position:sticky;top:0;z-index:9;background:var(--bg);padding:12px 0 10px;border-bottom:1px solid var(--line);
+       display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .bar .g{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text-2)}
+  select,input[type=number]{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);
+       border-radius:7px;background:var(--surface);color:var(--text)}
+  button{font:inherit;font-size:13px;padding:6px 13px;border:1px solid var(--line);border-radius:8px;
+         background:var(--surface);color:var(--text);cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:var(--accent-2);color:#fff}
+  button.danger:hover{border-color:var(--warn);color:var(--warn)}
+  .switch{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--text-2);cursor:pointer;
+          border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px}
+  .switch input{accent-color:var(--accent);margin:0}
+  .switch.on{border-color:var(--warn);color:var(--warn)}
+
+  /* 状态条 */
+  .stat{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--text-2);margin:12px 0 8px}
+  .stat b{color:var(--text);font-weight:600}
+  .stat .over{color:var(--warn);font-weight:600}
+
+  /* 答题卡 */
+  .paper{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto}
+  table.sheet{border-collapse:collapse;margin:0 auto;font-family:"Kaiti SC","STKaiti","Songti SC",serif}
+  table.sheet td.no{width:26px;border:none;color:#a9a296;font-size:11px;text-align:right;padding-right:6px;
+                    font-family:-apple-system,sans-serif;user-select:none}
+  table.sheet td{border:1px solid var(--grid);width:26px;height:28px;text-align:center;line-height:28px;
+                 font-size:16px;color:var(--text);padding:0}
+  table.sheet td.cur{background:#eef4ef;box-shadow:inset 0 0 0 2px var(--accent)}
+  table.sheet td.pad{background:#fbf9f4}
+  table.sheet tr.over td{background:#fdf3ef}
+  table.sheet tr.over td.no{color:var(--warn)}
+  table.sheet td.title{font-weight:600}
+  .hint{color:var(--text-2);font-size:12.5px;margin-top:10px;line-height:1.8}
+  kbd{background:var(--fill);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11.5px;
+      font-family:inherit}
+
+  .sync{font-size:12.5px;color:var(--text-2)}
+  .sync.ok{color:var(--accent)}
+  .sync.err{color:var(--warn)}
+  .ro-tip{display:none;background:#eef4ef;border:1px solid #cfe0d4;color:var(--accent);
+          border-radius:8px;padding:8px 12px;font-size:13px;margin:10px 0}
+  .ro-tip.show{display:block}
+
+  /* 隐藏输入框 */
+  #sink{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
+
+  /* 锁定横幅 */
+  .lockbar{display:none;background:#fdf3ef;border:1px solid #e8c9bd;color:var(--warn);
+           border-radius:8px;padding:8px 12px;font-size:13px;margin:10px 0}
+  .lockbar.show{display:block}
+
+  @media print{
+    .bar,.stat,.hint,.lockbar{display:none!important}
+    body{background:#fff}
+    .wrap{max-width:none;padding:0}
+    .paper{border:none;padding:0}
+    table.sheet td{border-color:#999}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="bar">
+    <div class="g">
+      <label for="target">字数</label>
+      <select id="target">
+        <option value="250">250 字（10 行）</option>
+        <option value="350" selected>350 字（14 行）</option>
+        <option value="450">450 字（18 行）</option>
+        <option value="600">600 字（24 行）</option>
+      </select>
+    </div>
+    <label class="switch" id="lockWrap"><input type="checkbox" id="lock"> 不可删改</label>
+    <button id="timeBtn">计时 30:00</button>
+    <button id="centerBtn" title="把第一行内容居中（用于标题）">标题居中</button>
+    <button id="indentBtn" title="在当前行首插入两个全角空格">空两格</button>
+    <button id="newlineBtn">新段落</button>
+    <button id="exportBtn">复制答案</button>
+    <button id="clearBtn" class="danger">清空</button>
+  </div>
+
+  <div class="ro-tip" id="rotip">只读模式：这份内容由出题方写入，你可以看但不能改。去掉网址里的 <code>ro=1</code> 即可编辑。</div>
+  <div class="lockbar" id="lockbar">🔒 不可删改已开启：退格和删除无效，写错的字也会留在格子里——这就是考场。</div>
+
+  <div class="stat">
+    <span>占格 <b id="used">0</b> / <b id="limit">350</b></span>
+    <span>行数 <b id="rows">14</b></span>
+    <span id="leftWrap">剩余 <b id="left">350</b></span>
+    <span id="timeLeft"></span>
+    <span id="sync" class="sync"></span>
+  </div>
+
+  <div class="paper" id="paper"></div>
+
+  <div class="hint">
+    <kbd>回车</kbd> 新段落（自动空两格）　<kbd>退格</kbd> 删一个字（锁定后无效）　直接点格子就能继续写<br>
+    标题写在第一行，写完按「标题居中」；正文每段按「新段落」会自动缩两格。<br>
+    内容存在本机浏览器里，关掉页面不会丢。
+  </div>
+
+  <textarea id="sink" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+</div>
+
+<script>
+const COLS = 25;
+const $ = (id) => document.getElementById(id);
+const paper = $('paper'), sink = $('sink');
+
+let text = localStorage.getItem('shenlun_sheet_text') || '';
+let locked = false;
+let composing = false;
+let timer = null, timeLeft = 30 * 60, timerRunning = false;
+
+/* ---------------- 渲染 ---------------- */
+function linesOf(t) {
+  return t.split('\n');
+}
+function rowsFromText(t) {
+  const rows = [];
+  linesOf(t).forEach((line) => {
+    if (line === '') { rows.push([]); return; }
+    const chars = [...line];
+    for (let i = 0; i < chars.length; i += COLS) rows.push(chars.slice(i, i + COLS));
+    if (chars.length % COLS === 0) rows.push([]);   // 刚好满行时另起一行
+  });
+  return rows;
+}
+function usedCells() {
+  return linesOf(text).reduce((sum, l) => sum + [...l].length, 0);
+}
+function targetCells() { return parseInt($('target').value, 10); }
+function minRows() { return Math.ceil(targetCells() / COLS) + 2; }
+
+function render() {
+  const rows = rowsFromText(text);
+  const target = targetCells();
+  const targetRow = Math.ceil(target / COLS);
+  const total = Math.max(rows.length + 1, minRows());
+  const flat = rows.flatMap(r => r.length ? r : ['']);
+  // 光标位置（最后一个字之后）
+  let cursorRow = rows.length - 1, cursorCol = (rows[rows.length - 1] || []).length;
+  if (cursorCol >= COLS) { cursorRow += 1; cursorCol = 0; }
+
+  let html = '<table class="sheet"><tbody>';
+  for (let r = 0; r < total; r++) {
+    const row = rows[r] || [];
+    html += `<tr class="${r >= targetRow ? 'over' : ''}"><td class="no">${r + 1}</td>`;
+    for (let c = 0; c < COLS; c++) {
+      const ch = row[c] || '';
+      let cls = '';
+      if (!ch) cls = 'pad';
+      if (r === cursorRow && c === cursorCol) cls = 'cur';
+      if (r === 0 && ch) cls += ' title';
+      html += `<td class="${cls}">${ch === ' ' ? '' : (ch || '')}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  paper.innerHTML = html;
+
+  const used = usedCells();
+  $('used').textContent = used;
+  $('limit').textContent = target;
+  $('rows').textContent = rows.length;
+  const left = target - used;
+  $('left').textContent = left >= 0 ? left : Math.abs(left);
+  $('leftWrap').className = left < 0 ? 'over' : '';
+  $('leftWrap').firstChild.textContent = left >= 0 ? '剩余 ' : '超出 ';
+  localStorage.setItem('shenlun_sheet_text', text);
+  if (typeof scheduleSave === 'function') scheduleSave();
+}
+
+/* ---------------- 输入 ---------------- */
+function append(str) {
+  if (!str) return;
+  // 换行统一处理：段首自动空两格
+  const parts = str.split('\n');
+  parts.forEach((p, i) => {
+    if (i > 0) text += '\n　　';
+    text += p;
+  });
+  render();
+}
+
+function backspace() {
+  if (locked) return;
+  if (!text) return;
+  const chars = [...text];
+  chars.pop();
+  text = chars.join('');
+  render();
+}
+
+function focusSink() { sink.focus({ preventScroll: true }); }
+
+sink.addEventListener('compositionstart', () => { composing = true; });
+sink.addEventListener('compositionend', (e) => {
+  composing = false;
+  append(e.data);
+  sink.value = '';
+});
+sink.addEventListener('input', () => {
+  if (composing) return;
+  if (sink.value) { append(sink.value); sink.value = ''; }
+});
+sink.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    append('\n');
+    return;
+  }
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    e.preventDefault();
+    backspace();
+    return;
+  }
+});
+sink.addEventListener('paste', (e) => {
+  e.preventDefault();
+  const t = (e.clipboardData || window.clipboardData).getData('text') || '';
+  append(t.replace(/\r/g, '').replace(/[ \t]+/g, ''));
+});
+
+paper.addEventListener('click', focusSink);
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('button,select,input,label')) focusSink();
+});
+
+/* ---------------- 工具栏 ---------------- */
+$('lock').addEventListener('change', (e) => {
+  locked = e.target.checked;
+  $('lockWrap').classList.toggle('on', locked);
+  $('lockbar').classList.toggle('show', locked);
+  focusSink();
+});
+
+$('target').addEventListener('change', render);
+
+$('newlineBtn').addEventListener('click', () => { append('\n'); focusSink(); });
+
+$('indentBtn').addEventListener('click', () => {
+  if (!text) { append('　　'); focusSink(); return; }
+  const idx = text.lastIndexOf('\n');
+  text = text.slice(0, idx + 1) + '　　' + text.slice(idx + 1);
+  render(); focusSink();
+});
+
+$('centerBtn').addEventListener('click', () => {
+  const lines = linesOf(text);
+  if (!lines.length || !lines[0].trim()) { alert('第一行为空，先写标题'); return; }
+  const t = lines[0].replace(/^[　\s]+|[　\s]+$/g, '');
+  const pad = Math.max(0, Math.floor((COLS - [...t].length) / 2));
+  lines[0] = '　'.repeat(pad) + t;
+  text = lines.join('\n');
+  render();
+});
+
+$('clearBtn').addEventListener('click', () => {
+  if (locked) { alert('不可删改已开启，先关掉开关再清空'); return; }
+  if (!confirm('清空全部内容？')) return;
+  text = ''; render(); focusSink();
+});
+
+$('exportBtn').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(text);
+    $('exportBtn').textContent = '已复制 ✓';
+    setTimeout(() => { $('exportBtn').textContent = '复制答案'; }, 1500);
+  } catch (err) {
+    alert('复制失败，请手动选中格子里的文字');
+  }
+});
+
+/* ---------------- 计时 ---------------- */
+function fmt(s) {
+  const m = Math.floor(s / 60), r = s % 60;
+  return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+}
+$('timeBtn').addEventListener('click', () => {
+  if (timerRunning) {
+    clearInterval(timer); timerRunning = false;
+    $('timeBtn').textContent = '继续 ' + fmt(timeLeft);
+    return;
+  }
+  timerRunning = true;
+  $('timeBtn').textContent = '暂停';
+  timer = setInterval(() => {
+    timeLeft -= 1;
+    $('timeLeft').textContent = '⏱ ' + fmt(timeLeft);
+    if (timeLeft <= 0) {
+      clearInterval(timer); timerRunning = false;
+      $('timeBtn').textContent = '重新计时';
+      $('timeLeft').textContent = '⏱ 时间到';
+      timeLeft = 30 * 60;
+    }
+  }, 1000);
+});
+
+/* ---------------- 远程接口 ---------------- */
+const QS = new URLSearchParams(location.search);
+const SHEET_ID = (QS.get('id') || 'main').slice(0, 64) || 'main';
+const READONLY = QS.get('ro') === '1';
+const REMOTE = /^https?:$/.test(location.protocol);
+let dirty = false, saveTimer = null, loading = false;
+
+function setSync(txt, cls) {
+  const el = $('sync');
+  el.textContent = txt;
+  el.className = 'sync' + (cls ? ' ' + cls : '');
+}
+
+async function loadRemote() {
+  if (!REMOTE) { setSync('本地模式'); return false; }
+  try {
+    const r = await fetch('/api/sheet?id=' + encodeURIComponent(SHEET_ID), { cache: 'no-store' });
+    const d = await r.json();
+    if (d && d.ok && typeof d.text === 'string') {
+      if (d.text && d.text !== text) {
+        loading = true;
+        text = d.text;
+        if (d.meta && d.meta.title) $('paperTitle') && ($('paperTitle').textContent = d.meta.title);
+        render();
+        loading = false;
+        setSync('已载入云端 · ' + new Date((d.updatedAt || 0) * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), 'ok');
+        return true;
+      }
+      setSync('云端无更新', 'ok');
+    }
+  } catch (e) {
+    setSync('离线（仅本地保存）', 'err');
+  }
+  return false;
+}
+
+function scheduleSave() {
+  if (READONLY || !REMOTE || loading) return;
+  dirty = true;
+  setSync('待保存…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveRemote, 1200);
+}
+
+async function saveRemote() {
+  if (READONLY || !REMOTE) return;
+  try {
+    const r = await fetch('/api/sheet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: SHEET_ID, text: text, meta: { chars: usedCells(), rows: rowsFromText(text).length, target: targetCells() } }),
+    });
+    const d = await r.json();
+    if (d && d.ok) { dirty = false; setSync('已保存 · ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), 'ok'); }
+    else setSync('保存失败', 'err');
+  } catch (e) {
+    setSync('保存失败（离线）', 'err');
+  }
+}
+
+/* ---------------- 对外接口（供出题/评分程序读写） ---------------- */
+window.SheetAPI = {
+  id: SHEET_ID,
+  getText: () => text,
+  setText: (t, opts) => { loading = !(opts && opts.sync); text = String(t || ''); render(); if (opts && opts.sync) saveRemote(); },
+  append: (t) => { append(String(t || '')); },
+  getStats: () => ({
+    text, chars: usedCells(), rows: rowsFromText(text).length,
+    target: targetCells(), lines: linesOf(text), locked, readonly: READONLY,
+  }),
+  clear: () => { if (!locked) { text = ''; render(); saveRemote(); } },
+  setLock: (v) => { $('lock').checked = !!v; $('lock').dispatchEvent(new Event('change')); },
+  save: () => saveRemote(),
+  reload: () => loadRemote(),
+};
+
+/* ---------------- 只读模式 ---------------- */
+function applyReadonly() {
+  if (!READONLY) return;
+  $('rotip').classList.add('show');
+  sink.setAttribute('readonly', 'readonly');
+  $('lock').disabled = true;
+  $('clearBtn').disabled = true;
+  $('newlineBtn').disabled = true;
+  $('indentBtn').disabled = true;
+  $('centerBtn').disabled = true;
+}
+
+/* ---------------- 启动 ---------------- */
+(function boot() {
+  // URL 预填：?text=<base64 或明文>&title=<标题>
+  const b64 = QS.get('text');
+  if (b64) {
+    try {
+      const decoded = decodeURIComponent(escape(atob(b64.replace(/-/g, '+').replace(/_/g, '/'))));
+      text = decoded;
+    } catch (e) { text = b64; }
+  }
+  const t = QS.get('title');
+  if (t && $('paperTitle')) $('paperTitle').textContent = decodeURIComponent(t);
+
+  render();
+  applyReadonly();
+  loadRemote().then((loaded) => {
+    if (!loaded) setSync(REMOTE ? '本地草稿' : '本地模式');
+    if (!READONLY) focusSink();
+  });
+})();
+</script>
+</body>
+</html>
