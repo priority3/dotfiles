@@ -333,6 +333,16 @@ sink.addEventListener('keydown', (e) => {
     backspace();
     return;
   }
+  // 可见 ASCII（数字、字母、标点、空格）不走输入法：
+  // 输入法会把单个数字提交成「8 + 半角空格」，或者干脆吞掉，
+  // 这里直接拦下来自己上字，一次按键 = 一格，绝不多也不丢。
+  if (e.isComposing || composing) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length === 1 && /[\x20-\x7e]/.test(e.key)) {
+    e.preventDefault();
+    append(e.key);
+    return;
+  }
 });
 sink.addEventListener('paste', (e) => {
   e.preventDefault();
