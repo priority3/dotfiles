@@ -484,8 +484,10 @@ function applyMeta(meta) {
   if (!meta) return;
   if (meta.title) { $('qtitle').textContent = meta.title; metaCache.title = meta.title; document.title = meta.title + ' · 申论答题卡'; }
   if (meta.question) {
-    if (meta.annotations) $('qbody').innerHTML = sanitizeHtml(meta.annotations);
-    else $('qbody').textContent = meta.question;
+    if (meta.annotations) {
+      $('qbody').innerHTML = sanitizeHtml(meta.annotations);
+      if (flattenMarks($('qbody'))) meta.annotations = $('qbody').innerHTML;  // 压平后回存
+    } else $('qbody').textContent = meta.question;
     metaCache.question = meta.question;
     metaCache.annotations = meta.annotations || '';
     $('qbox').open = true;
@@ -503,6 +505,23 @@ function sanitizeHtml(h) {
     });
   });
   return box.innerHTML;
+}
+
+/** 去掉重复包裹的同色标记：<mark class=g><mark class=g>x</mark></mark> → 单个 */
+function flattenMarks(root) {
+  let changed = false;
+  for (let pass = 0; pass < 5; pass += 1) {
+    let hit = false;
+    root.querySelectorAll('mark, u.mk, s.mk').forEach((el) => {
+      const p = el.parentElement;
+      if (p && p !== root && p.tagName === el.tagName && p.className === el.className) {
+        el.replaceWith(...el.childNodes);
+        hit = true;
+      }
+    });
+    if (hit) changed = true; else break;
+  }
+  return changed;
 }
 
 const markbar = $('markbar');
@@ -555,7 +574,6 @@ document.addEventListener('mousedown', (e) => {
 function applyMark(kind) {
   const r = savedRange || currentRange();
   if (!r) return;
-  let inserted = null;   // 本次插入的标记元素，用于标注后保持选中
   if (kind === 'clear') {
     // 清除选区内的所有标记
     const frag = r.cloneContents();
@@ -579,22 +597,17 @@ function applyMark(kind) {
       const frag = r.extractContents();
       el.appendChild(frag);
       r.insertNode(el);
-      inserted = el;
     } catch (err) { return; }
   }
-  // 保持选中态：把选区落到刚处理完的内容上，可连续叠加标记
+  // 标注完成即取消选中：选区清空，工具条收起，界面回到干净状态
   try {
     const sel = window.getSelection();
-    const after = inserted;
-    if (after) {
-      const nr = document.createRange();
-      nr.selectNodeContents(after);
+    if (sel) {
       sel.removeAllRanges();
-      sel.addRange(nr);
-    } else {
-      sel.removeAllRanges();
+      if (sel.empty) sel.empty();          // 老版 Safari 的兜底
     }
-  } catch (err) { /* 选区恢复失败不影响已完成的标记 */ }
+    savedRange = null;                      // 防止下一次误用旧选区
+  } catch (err) { /* 清不了也不影响已完成的标记 */ }
   markbar.classList.remove('show');
   metaCache.annotations = $('qbody').innerHTML;
   scheduleSave();
