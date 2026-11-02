@@ -283,15 +283,44 @@ function backspace() {
 
 function focusSink() { sink.focus({ preventScroll: true }); }
 
-sink.addEventListener('compositionstart', () => { composing = true; });
+/* 输入法常常在「单个数字/字母」提交时自动补一个半角空格，
+   答题卡里这种空格会变成空格子，必须去掉；全角空格（缩进）保留 */
+function cleanIme(str) {
+  let t = String(str || '');
+  if (!t) return '';
+  const prevAlnum = /[0-9A-Za-z]$/.test(text);
+  // 开头若是半角空格，且上一个字是数字/字母，判定为输入法补的，丢掉
+  t = t.replace(/^[ \u00a0]+/, (m) => (prevAlnum ? '' : m));
+  // 结尾的半角空格一律丢掉（下一个字会紧接上来）
+  t = t.replace(/[ \u00a0]+$/, '');
+  return t;
+}
+
+let compBase = '';
+sink.addEventListener('compositionstart', () => {
+  composing = true;
+  compBase = sink.value;
+});
 sink.addEventListener('compositionend', (e) => {
   composing = false;
-  append(e.data);
+  // 有的输入法把结果写进 textarea 而不是 e.data，两边都兜住
+  let s = e.data;
+  if (!s) s = sink.value.slice(compBase.length);
   sink.value = '';
+  compBase = '';
+  append(cleanIme(s));
+  focusSink();
 });
-sink.addEventListener('input', () => {
-  if (composing) return;
-  if (sink.value) { append(sink.value); sink.value = ''; }
+sink.addEventListener('input', (e) => {
+  // 以浏览器给的 isComposing 为准，避免标志卡死导致后面所有输入被吞
+  if (e.isComposing === true) return;
+  composing = false;
+  const v = sink.value;
+  if (!v) return;
+  // 普通按键原样接收；只有「单个字母数字 + 尾随半角空格」这种输入法产物才削掉空格。
+  // 手动敲的空格是单独一次 input，不会命中这条，缩进不受影响。
+  append(/^[0-9A-Za-z][ \u00a0]$/.test(v) ? v.slice(0, -1) : v);
+  sink.value = '';
 });
 sink.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
