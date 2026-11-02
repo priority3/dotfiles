@@ -313,7 +313,11 @@ sink.addEventListener('paste', (e) => {
 
 paper.addEventListener('click', focusSink);
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('button,select,input,label')) focusSink();
+  // 题目材料区、题目面板、标记工具条：不要抢焦点
+  // 抢焦会把 DOM 选区折叠，用户刚拖出来的高亮瞬间消失
+  if (e.target.closest('#qbody, .qbox, #markbar')) return;
+  if (e.target.closest('button,select,input,label,a,summary')) return;
+  focusSink();
 });
 
 /* ---------------- 工具栏 ---------------- */
@@ -537,7 +541,13 @@ document.addEventListener('selectionchange', () => {
   clearTimeout(window.__selT);
   window.__selT = setTimeout(showMarkbar, 120);
 });
-document.addEventListener('scroll', () => markbar.classList.remove('show'), true);
+let scrollLock = 0;
+document.addEventListener('scroll', (e) => {
+  // 材料面板内部滚动（比如拖到边缘自动滚）不关闭工具条，避免标注时闪掉
+  if (e.target && e.target.id === 'qbody') return;
+  if (Date.now() < scrollLock) return;
+  markbar.classList.remove('show');
+}, true);
 document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#markbar')) markbar.classList.remove('show');
 });
@@ -545,6 +555,7 @@ document.addEventListener('mousedown', (e) => {
 function applyMark(kind) {
   const r = savedRange || currentRange();
   if (!r) return;
+  let inserted = null;   // 本次插入的标记元素，用于标注后保持选中
   if (kind === 'clear') {
     // 清除选区内的所有标记
     const frag = r.cloneContents();
@@ -568,13 +579,31 @@ function applyMark(kind) {
       const frag = r.extractContents();
       el.appendChild(frag);
       r.insertNode(el);
+      inserted = el;
     } catch (err) { return; }
   }
-  window.getSelection().removeAllRanges();
+  // 保持选中态：把选区落到刚处理完的内容上，可连续叠加标记
+  try {
+    const sel = window.getSelection();
+    const after = inserted;
+    if (after) {
+      const nr = document.createRange();
+      nr.selectNodeContents(after);
+      sel.removeAllRanges();
+      sel.addRange(nr);
+    } else {
+      sel.removeAllRanges();
+    }
+  } catch (err) { /* 选区恢复失败不影响已完成的标记 */ }
   markbar.classList.remove('show');
   metaCache.annotations = $('qbody').innerHTML;
   scheduleSave();
 }
+
+markbar.addEventListener('mousedown', (e) => {
+  // 不让按钮抢焦点，否则选区在 mousedown 阶段就已经被折叠
+  e.preventDefault();
+});
 
 markbar.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-mark]');
