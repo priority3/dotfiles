@@ -83,10 +83,28 @@
     <div class="g">
       <label for="target">字数</label>
       <select id="target">
-        <option value="250">250 字（10 行）</option>
-        <option value="350" selected>350 字（14 行）</option>
-        <option value="450">450 字（18 行）</option>
-        <option value="600">600 字（24 行）</option>
+        <option value="150">150 字 · 概括</option>
+        <option value="200">200 字 · 分析</option>
+        <option value="250">250 字 · 概括/公文</option>
+        <option value="300">300 字 · 分析/公文</option>
+        <option value="350" selected>350 字 · 公文</option>
+        <option value="400">400 字 · 对策</option>
+        <option value="450">450 字 · 对策</option>
+        <option value="500">500 字 · 公文/对策</option>
+        <option value="600">600 字 · 公文</option>
+        <option value="800">800 字 · 作文（下限）</option>
+        <option value="1000">1000 字 · 作文</option>
+        <option value="1200">1200 字 · 作文（上限）</option>
+        <option value="custom">自定义…</option>
+      </select>
+      <input type="number" id="customNum" min="50" max="2000" step="10" placeholder="字数" style="display:none;width:78px">
+    </div>
+    <div class="g">
+      <label for="cols">每行</label>
+      <select id="cols">
+        <option value="20">20 格</option>
+        <option value="25" selected>25 格</option>
+        <option value="30">30 格</option>
       </select>
     </div>
     <label class="switch" id="lockWrap"><input type="checkbox" id="lock"> 不可删改</label>
@@ -121,7 +139,7 @@
 </div>
 
 <script>
-const COLS = 25;
+let COLS = parseInt(localStorage.getItem('shenlun_sheet_cols') || '25', 10);
 const $ = (id) => document.getElementById(id);
 const paper = $('paper'), sink = $('sink');
 
@@ -147,7 +165,11 @@ function rowsFromText(t) {
 function usedCells() {
   return linesOf(text).reduce((sum, l) => sum + [...l].length, 0);
 }
-function targetCells() { return parseInt($('target').value, 10); }
+function targetCells() {
+  const v = $('target').value;
+  if (v === 'custom') return Math.max(50, parseInt($('customNum').value || '350', 10));
+  return parseInt(v, 10);
+}
 function minRows() { return Math.ceil(targetCells() / COLS) + 2; }
 
 function render() {
@@ -186,6 +208,8 @@ function render() {
   $('leftWrap').className = left < 0 ? 'over' : '';
   $('leftWrap').firstChild.textContent = left >= 0 ? '剩余 ' : '超出 ';
   localStorage.setItem('shenlun_sheet_text', text);
+  localStorage.setItem('shenlun_sheet_target', $('target').value);
+  if ($('target').value === 'custom') localStorage.setItem('shenlun_sheet_custom', $('customNum').value || '');
   if (typeof scheduleSave === 'function') scheduleSave();
 }
 
@@ -253,7 +277,18 @@ $('lock').addEventListener('change', (e) => {
   focusSink();
 });
 
-$('target').addEventListener('change', render);
+$('target').addEventListener('change', () => {
+  const custom = $('target').value === 'custom';
+  $('customNum').style.display = custom ? 'inline-block' : 'none';
+  if (custom && !$('customNum').value) $('customNum').value = 350;
+  render();
+});
+$('customNum').addEventListener('input', render);
+$('cols').addEventListener('change', () => {
+  COLS = parseInt($('cols').value, 10) || 25;
+  localStorage.setItem('shenlun_sheet_cols', String(COLS));
+  render();
+});
 
 $('newlineBtn').addEventListener('click', () => { append('\n'); focusSink(); });
 
@@ -405,6 +440,15 @@ function applyReadonly() {
 
 /* ---------------- 启动 ---------------- */
 (function boot() {
+  $('cols').value = String(COLS);
+  if (localStorage.getItem('shenlun_sheet_target')) {
+    const t = localStorage.getItem('shenlun_sheet_target');
+    $('target').value = t;
+    if (t === 'custom') {
+      $('customNum').style.display = 'inline-block';
+      $('customNum').value = localStorage.getItem('shenlun_sheet_custom') || 350;
+    }
+  }
   // URL 预填：?text=<base64 或明文>&title=<标题>
   const b64 = QS.get('text');
   if (b64) {
