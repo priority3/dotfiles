@@ -52,6 +52,34 @@
   kbd{background:var(--fill);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11.5px;
       font-family:inherit}
 
+  .qbox{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin:12px 0;overflow:hidden}
+  .qbox summary{cursor:pointer;padding:10px 14px;font-size:13.5px;color:var(--text-2);
+                background:#f4f1ea;list-style:none;user-select:none}
+  .qbox summary::-webkit-details-marker{display:none}
+  .qbox summary::before{content:"▸ ";color:var(--text-3,#a9a296)}
+  .qbox[open] summary::before{content:"▾ "}
+  .qtitle{color:var(--text);font-weight:600}
+  .qbody{padding:14px 16px;font-size:13.5px;line-height:1.95;color:var(--text);
+         white-space:pre-wrap;max-height:46vh;overflow:auto}
+  .qbody b{color:var(--accent)}
+
+  /* 材料标注 */
+  .qbody{position:relative}
+  .qbody mark{padding:0;border-radius:2px;color:inherit;background:transparent}
+  .qbody mark.y{background:#fdf0a8}
+  .qbody mark.g{background:#cdeccd}
+  .qbody mark.b{background:#cfe4f7}
+  .qbody u.mk{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:#b4553f}
+  .qbody s.mk{text-decoration-thickness:2px;text-decoration-color:#8a8578}
+  .markbar{position:fixed;z-index:50;display:none;background:#2b2b28;border-radius:9px;padding:5px;
+           box-shadow:0 8px 24px rgba(0,0,0,.22);gap:3px;align-items:center}
+  .markbar.show{display:flex}
+  .markbar button{background:transparent;border:none;color:#f2efe8;font-size:12.5px;padding:5px 9px;
+                  border-radius:6px;cursor:pointer;white-space:nowrap}
+  .markbar button:hover{background:rgba(255,255,255,.16)}
+  .markbar .sw{width:18px;height:18px;border-radius:4px;border:1px solid rgba(255,255,255,.35);padding:0}
+  .markbar .sep{width:1px;height:18px;background:rgba(255,255,255,.22);margin:0 3px}
+
   .sync{font-size:12.5px;color:var(--text-2)}
   .sync.ok{color:var(--accent)}
   .sync.err{color:var(--warn)}
@@ -109,14 +137,22 @@
     </div>
     <label class="switch" id="lockWrap"><input type="checkbox" id="lock"> 不可删改</label>
     <button id="timeBtn">计时 30:00</button>
+    <button id="reloadBtn" title="从服务器重新拉取题目与内容">↻ 刷新题目</button>
     <button id="centerBtn" title="把第一行内容居中（用于标题）">标题居中</button>
     <button id="indentBtn" title="在当前行首插入两个全角空格">空两格</button>
     <button id="newlineBtn">新段落</button>
+    <button id="clearMarks">清除标记</button>
     <button id="exportBtn">复制答案</button>
+    <a href="/sheet/list.html" style="font-size:13px;padding:6px 13px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);text-decoration:none">历史</a>
     <button id="clearBtn" class="danger">清空</button>
   </div>
 
   <div class="ro-tip" id="rotip">只读模式：这份内容由出题方写入，你可以看但不能改。去掉网址里的 <code>ro=1</code> 即可编辑。</div>
+  <details class="qbox" id="qbox" open>
+    <summary>今日题目　<span id="qtitle" class="qtitle">未设置</span></summary>
+    <div class="qbody" id="qbody">（暂无题目。出题后这里会显示材料与作答要求。）</div>
+  </details>
+
   <div class="lockbar" id="lockbar">🔒 不可删改已开启：退格和删除无效，写错的字也会留在格子里——这就是考场。</div>
 
   <div class="stat">
@@ -128,6 +164,17 @@
   </div>
 
   <div class="paper" id="paper"></div>
+
+  <div class="markbar" id="markbar">
+    <button class="sw" data-mark="y" title="黄色高亮" style="background:#fdf0a8"></button>
+    <button class="sw" data-mark="g" title="绿色高亮" style="background:#cdeccd"></button>
+    <button class="sw" data-mark="b" title="蓝色高亮" style="background:#cfe4f7"></button>
+    <span class="sep"></span>
+    <button data-mark="u">下划线</button>
+    <button data-mark="s">删除线</button>
+    <span class="sep"></span>
+    <button data-mark="clear">取消标记</button>
+  </div>
 
   <div class="hint">
     <kbd>回车</kbd> 新段落（自动空两格）　<kbd>退格</kbd> 删一个字（锁定后无效）　直接点格子就能继续写<br>
@@ -299,6 +346,12 @@ $('indentBtn').addEventListener('click', () => {
   render(); focusSink();
 });
 
+$('reloadBtn').addEventListener('click', async () => {
+  setSync('重新加载中…');
+  const ok = await loadRemote();
+  if (!ok) setSync(REMOTE ? '云端没有题目' : '本地模式', 'err');
+});
+
 $('centerBtn').addEventListener('click', () => {
   const lines = linesOf(text);
   if (!lines.length || !lines[0].trim()) { alert('第一行为空，先写标题'); return; }
@@ -355,7 +408,7 @@ const QS = new URLSearchParams(location.search);
 const SHEET_ID = (QS.get('id') || 'main').slice(0, 64) || 'main';
 const READONLY = QS.get('ro') === '1';
 const REMOTE = /^https?:$/.test(location.protocol);
-let dirty = false, saveTimer = null, loading = false;
+let dirty = false, saveTimer = null, loading = false, booted = false;
 
 function setSync(txt, cls) {
   const el = $('sync');
@@ -369,16 +422,19 @@ async function loadRemote() {
     const r = await fetch('/api/sheet?id=' + encodeURIComponent(SHEET_ID), { cache: 'no-store' });
     const d = await r.json();
     if (d && d.ok && typeof d.text === 'string') {
+      let hadMeta = false;
+      if (d.meta && (d.meta.title || d.meta.question)) { applyMeta(d.meta); hadMeta = true; }  // 题目/标题先落地
       if (d.text && d.text !== text) {
         loading = true;
         text = d.text;
-        if (d.meta && d.meta.title) $('paperTitle') && ($('paperTitle').textContent = d.meta.title);
+        if (d.meta) applyMeta(d.meta);
         render();
         loading = false;
         setSync('已载入云端 · ' + new Date((d.updatedAt || 0) * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), 'ok');
         return true;
       }
-      setSync('云端无更新', 'ok');
+      setSync(hadMeta ? '已载入云端题目' : '云端无更新', 'ok');
+      if (hadMeta) return true;
     }
   } catch (e) {
     setSync('离线（仅本地保存）', 'err');
@@ -386,8 +442,18 @@ async function loadRemote() {
   return false;
 }
 
+let metaCache = { title: '', question: '', annotations: '' };
+function getMetaForSave() {
+  const q = metaCache.question || ($('qbody').textContent.startsWith('（暂无题目') ? '' : $('qbody').textContent);
+  const t = metaCache.title || ($('qtitle').textContent === '未设置' ? '' : $('qtitle').textContent);
+  const a = metaCache.annotations || '';
+  const out = { title: t, question: q };
+  if (a) out.annotations = a;
+  return out;
+}
+
 function scheduleSave() {
-  if (READONLY || !REMOTE || loading) return;
+  if (READONLY || !REMOTE || loading || !booted) return;
   dirty = true;
   setSync('待保存…');
   clearTimeout(saveTimer);
@@ -400,7 +466,7 @@ async function saveRemote() {
     const r = await fetch('/api/sheet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: SHEET_ID, text: text, meta: { chars: usedCells(), rows: rowsFromText(text).length, target: targetCells() } }),
+      body: JSON.stringify({ id: SHEET_ID, text: text, meta: Object.assign(getMetaForSave(), { chars: usedCells(), rows: rowsFromText(text).length, target: targetCells() }) }),
     });
     const d = await r.json();
     if (d && d.ok) { dirty = false; setSync('已保存 · ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), 'ok'); }
@@ -409,6 +475,119 @@ async function saveRemote() {
     setSync('保存失败（离线）', 'err');
   }
 }
+
+function applyMeta(meta) {
+  if (!meta) return;
+  if (meta.title) { $('qtitle').textContent = meta.title; metaCache.title = meta.title; document.title = meta.title + ' · 申论答题卡'; }
+  if (meta.question) {
+    if (meta.annotations) $('qbody').innerHTML = sanitizeHtml(meta.annotations);
+    else $('qbody').textContent = meta.question;
+    metaCache.question = meta.question;
+    metaCache.annotations = meta.annotations || '';
+    $('qbox').open = true;
+  }
+}
+
+/* ---------------- 材料标注 ---------------- */
+function sanitizeHtml(h) {
+  const box = document.createElement('div');
+  box.innerHTML = String(h || '');
+  box.querySelectorAll('script,iframe,object,embed,link,style').forEach(n => n.remove());
+  box.querySelectorAll('*').forEach(n => {
+    [...n.attributes].forEach(a => {
+      if (/^on/i.test(a.name) || (a.name === 'href' && /^javascript:/i.test(a.value))) n.removeAttribute(a.name);
+    });
+  });
+  return box.innerHTML;
+}
+
+const markbar = $('markbar');
+let savedRange = null;
+
+function inQbody(node) {
+  const b = $('qbody');
+  return node && (b === node || b.contains(node));
+}
+
+function currentRange() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const r = sel.getRangeAt(0);
+  if (!r.toString().trim()) return null;
+  if (!inQbody(r.commonAncestorContainer)) return null;
+  return r;
+}
+
+function showMarkbar() {
+  const r = currentRange();
+  if (!r) { markbar.classList.remove('show'); return; }
+  savedRange = r.cloneRange();
+  const rect = r.getBoundingClientRect();
+  markbar.classList.add('show');
+  const bw = markbar.offsetWidth || 300;
+  let left = rect.left + rect.width / 2 - bw / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
+  let top = rect.top - markbar.offsetHeight - 8;
+  if (top < 8) top = rect.bottom + 8;
+  markbar.style.left = left + 'px';
+  markbar.style.top = top + 'px';
+}
+
+document.addEventListener('selectionchange', () => {
+  clearTimeout(window.__selT);
+  window.__selT = setTimeout(showMarkbar, 120);
+});
+document.addEventListener('scroll', () => markbar.classList.remove('show'), true);
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#markbar')) markbar.classList.remove('show');
+});
+
+function applyMark(kind) {
+  const r = savedRange || currentRange();
+  if (!r) return;
+  if (kind === 'clear') {
+    // 清除选区内的所有标记
+    const frag = r.cloneContents();
+    const walker = document.createTreeWalker(frag, NodeFilter.SHOW_ELEMENT);
+    const targets = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n.tagName === 'MARK' || (n.tagName === 'U' && n.classList.contains('mk')) || (n.tagName === 'S' && n.classList.contains('mk'))) targets.push(n);
+    }
+    if (!targets.length) { markbar.classList.remove('show'); return; }
+    targets.forEach(el => el.replaceWith(...el.childNodes));
+    r.deleteContents();
+    r.insertNode(frag);
+  } else {
+    const el = kind === 'u' ? document.createElement('u')
+             : kind === 's' ? document.createElement('s')
+             : document.createElement('mark');
+    if (kind === 'u' || kind === 's') el.className = 'mk';
+    else el.className = kind;
+    try {
+      const frag = r.extractContents();
+      el.appendChild(frag);
+      r.insertNode(el);
+    } catch (err) { return; }
+  }
+  window.getSelection().removeAllRanges();
+  markbar.classList.remove('show');
+  metaCache.annotations = $('qbody').innerHTML;
+  scheduleSave();
+}
+
+markbar.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mark]');
+  if (b) { applyMark(b.dataset.mark); }
+});
+
+$('clearMarks').addEventListener('click', () => {
+  if (!confirm('清除全部标记？题目文字不会变。')) return;
+  const q = metaCache.question || $('qbody').textContent;
+  $('qbody').textContent = q;
+  metaCache.annotations = '';
+  scheduleSave();
+});
 
 /* ---------------- 对外接口（供出题/评分程序读写） ---------------- */
 window.SheetAPI = {
@@ -422,6 +601,8 @@ window.SheetAPI = {
   }),
   clear: () => { if (!locked) { text = ''; render(); saveRemote(); } },
   setLock: (v) => { $('lock').checked = !!v; $('lock').dispatchEvent(new Event('change')); },
+  setQuestion: (q, title) => { applyMeta({ question: q, title: title || '' }); },
+  getMeta: () => ({ title: $('qtitle').textContent, question: $('qbody').textContent }),
   save: () => saveRemote(),
   reload: () => loadRemote(),
 };
@@ -458,11 +639,13 @@ function applyReadonly() {
     } catch (e) { text = b64; }
   }
   const t = QS.get('title');
-  if (t && $('paperTitle')) $('paperTitle').textContent = decodeURIComponent(t);
+  if (t) applyMeta({ title: decodeURIComponent(t) });
 
   render();
   applyReadonly();
   loadRemote().then((loaded) => {
+    booted = true;
+    if (!loaded && REMOTE) setTimeout(() => { if ($('qbody').textContent.startsWith('（暂无题目')) loadRemote(); }, 1500);
     if (!loaded) setSync(REMOTE ? '本地草稿' : '本地模式');
     if (!READONLY) focusSink();
   });
