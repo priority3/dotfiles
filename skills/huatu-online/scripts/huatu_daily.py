@@ -316,6 +316,37 @@ def advice(r, lectures) -> list:
     return out[:4]
 
 
+def fetch_wrongs(max_topics: int = 8):
+    """抓错题本（按子题型分组的原题）。失败返回 []。"""
+    try:
+        r = subprocess.run([str(RUN_SH), 'wrongs', str(max_topics)],
+                           capture_output=True, text=True, timeout=900)
+        if r.returncode != 0:
+            return []
+        return json.loads(r.stdout).get('topics') or []
+    except Exception:
+        return []
+
+
+def group_wrongs(topics: list) -> list:
+    """把子题型下的题按 题型 归类，去重后每类留一道代表题"""
+    seen_stem = set()
+    groups = {}
+    for tp in topics:
+        for q in tp.get('questions') or []:
+            key = (q.get('topicKind') or q.get('topicModule') or tp['name'].split('（')[0]).strip()
+            stem_key = (q.get('stem') or '')[:40]
+            if not stem_key or stem_key in seen_stem:
+                continue
+            seen_stem.add(stem_key)
+            g = groups.setdefault(key, {'kind': key, 'module': q.get('topicModule') or '',
+                                        'n': 0, 'rep': None})
+            g['n'] += 1
+            if g['rep'] is None:
+                g['rep'] = q
+    return sorted(groups.values(), key=lambda x: -x['n'])
+
+
 def wrongs_by_topic(date: str) -> list:
     """从 questions 表取当日错题，按题型归类，每类只留一道代表题（耗时最长的）"""
     try:
@@ -419,7 +450,37 @@ def render(r, tips) -> str:
                      '考场上超过 90 秒就该跳过。')
             L.append('')
 
-    w = r.get('wrongs') or []
+    wg = r.get('wrong_groups') or []
+    if wg:
+        L.append(f'## 错题复盘（{len(wg)} 类 / {sum(g["n"] for g in wg)} 道）')
+        L.append('')
+        L.append('同一类只讲一道，其余同类题错因相同。')
+        L.append('')
+        for g in wg:
+            q = g['rep'] or {}
+            L.append(f"### {g['kind']}（{g['n']} 道）")
+            L.append('')
+            if q.get('stem'):
+                L.append(f"> {q['stem']}")
+                if q.get('options'):
+                    L.append('> ' + '　'.join(f"{o.get('k')}.{o.get('t')}" for o in q['options'] if o.get('k')))
+                L.append('')
+            meta = []
+            if q.get('answer'):
+                meta.append(f"正确答案 {q['answer']}")
+            if q.get('siteAccuracy'):
+                meta.append(f"全站正确率 {q['siteAccuracy']}%")
+            if meta:
+                L.append('　'.join(meta))
+                L.append('')
+            m = _method_for(g['kind'], g['module'])
+            if m:
+                L.append('**这一类的方法**')
+                for x in m['must'][:3]:
+                    L.append(f'- {x}')
+                L.append('')
+
+    w = [] if wg else (r.get('wrongs') or [])
     if w:
         L.append(f'## 昨日错题复盘（{len(w)} 类）')
         L.append('')
@@ -460,6 +521,7 @@ def main() -> int:
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--date', default=dt.date.today().isoformat())
     ap.add_argument('--papers', type=int, default=6, help='逐题抓取最近几份练习')
+    ap.add_argument('--wrong-topics', type=int, default=8, help='错题本最多抓几个子题型')
     args = ap.parse_args()
 
     init_db()
@@ -493,6 +555,8 @@ def main() -> int:
     # 错题：优先昨天，没有就用今天抓到的
     r['wrongs'] = wrongs_by_topic((dt.date.fromisoformat(date) - dt.timedelta(days=1)).isoformat()) \
         or wrongs_by_topic(date)
+    if not args.no_fetch:
+        r['wrong_groups'] = group_wrongs(fetch_wrongs(args.wrong_topics))
 
     if args.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))

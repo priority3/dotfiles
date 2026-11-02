@@ -36,6 +36,8 @@ done
 
 if [ "$MODE" = "detail" ]; then
   CDP_PORT="$PORT" node "$DIR/huatu_detail.js" "${2:-6}"
+elif [ "$MODE" = "wrongs" ]; then
+  CDP_PORT="$PORT" node "$DIR/huatu_wrongs.js" "${2:-12}"
 else
   CDP_PORT="$PORT" node "$DIR/huatu_fetch.js" "$MODE"
 fi
