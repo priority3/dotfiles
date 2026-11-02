@@ -107,9 +107,14 @@ const PARSE = String.raw`(() => {
       return JSON.stringify(rows.filter(r => { if (seen.has(r.href)) return false; seen.add(r.href); return true; }));
     })()`, returnByValue: true,
   });
-  const topics = JSON.parse(listRes.result.value)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, MAX_TOPICS);
+  // 优先取「模块级」行（名字去掉（共N道错题）后正好等于模块名），保证每天基准一致
+  const MODULES = ['资料分析', '常识判断', '言语理解与表达', '数量关系', '判断推理', '政治理论'];
+  const all = JSON.parse(listRes.result.value);
+  const isModule = (t) => MODULES.includes(t.name.replace(/（共\d+道错题）\s*$/, '').trim());
+  const topics = [
+    ...all.filter(isModule).sort((a, b) => b.count - a.count),
+    ...all.filter((t) => !isModule(t)).sort((a, b) => b.count - a.count),
+  ].slice(0, MAX_TOPICS);
 
   // 2) 逐个打开子题型，抓题目
   const out = [];

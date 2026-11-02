@@ -328,6 +328,60 @@ def fetch_wrongs(max_topics: int = 8):
         return []
 
 
+def save_wrongs(date: str, topics: list) -> None:
+    """错题本快照：每天存一份，靠前后两天的差集定位新增/清理"""
+    rows = []
+    seen = set()
+    for tp in topics:
+        for q in tp.get('questions') or []:
+            stem = (q.get('stem') or '').strip()
+            if not stem:
+                continue
+            sig = str(abs(hash(stem[:80])))
+            if sig in seen:
+                continue
+            seen.add(sig)
+            rows.append((date, sig, (q.get('topicKind') or '').strip(),
+                         (q.get('topicModule') or '').strip(), stem[:200],
+                         json.dumps(q.get('options') or [], ensure_ascii=False),
+                         q.get('answer') or '', q.get('siteAccuracy')))
+    with sqlite3.connect(DB) as c:
+        c.execute("""CREATE TABLE IF NOT EXISTS wrong_snapshots (
+            date TEXT, sig TEXT, kind TEXT, module TEXT, stem TEXT,
+            options TEXT, answer TEXT, site_acc INTEGER, PRIMARY KEY (date, sig))""")
+        c.execute('DELETE FROM wrong_snapshots WHERE date=?', (date,))
+        c.executemany('INSERT OR REPLACE INTO wrong_snapshots VALUES (?,?,?,?,?,?,?,?)', rows)
+
+
+def diff_wrongs(date: str) -> dict:
+    """今日 vs 上一次快照：新增（昨天做错的）/ 清理（昨天重做对的）"""
+    with sqlite3.connect(DB) as c:
+        c.row_factory = sqlite3.Row
+        prev = c.execute('SELECT MAX(date) d FROM wrong_snapshots WHERE date < ?', (date,)).fetchone()
+        today = c.execute('SELECT * FROM wrong_snapshots WHERE date=?', (date,)).fetchall()
+        if not prev or not prev['d']:
+            return {'prev': None, 'new': [], 'cleared': 0, 'today': len(today)}
+        old = c.execute('SELECT * FROM wrong_snapshots WHERE date=?', (prev['d'],)).fetchall()
+    old_sig = {r['sig'] for r in old}
+    today_sig = {r['sig'] for r in today}
+    new = [dict(r) for r in today if r['sig'] not in old_sig]
+    return {'prev': prev['d'], 'new': new, 'cleared': len(old_sig - today_sig), 'today': len(today)}
+
+
+def group_new_wrongs(new_rows: list) -> list:
+    groups = {}
+    for r in new_rows:
+        key = (r.get('kind') or r.get('module') or '其他').strip()
+        g = groups.setdefault(key, {'kind': key, 'module': r.get('module') or '',
+                                    'n': 0, 'rep': None})
+        g['n'] += 1
+        if g['rep'] is None:
+            g['rep'] = {'stem': r.get('stem'), 'answer': r.get('answer'),
+                        'siteAcc': r.get('site_acc'),
+                        'options': json.loads(r['options']) if r.get('options') else []}
+    return sorted(groups.values(), key=lambda x: -x['n'])
+
+
 def group_wrongs(topics: list) -> list:
     """把子题型下的题按 题型 归类，去重后每类留一道代表题"""
     seen_stem = set()
@@ -450,13 +504,56 @@ def render(r, tips) -> str:
                      '考场上超过 90 秒就该跳过。')
             L.append('')
 
-    wg = r.get('wrong_groups') or []
+    wd = r.get('wrong_diff') or {}
+    nw = r.get('new_wrongs') or []
+    if wd.get('prev') and nw:
+        extra = f"，同时清掉 {wd['cleared']} 道" if wd.get('cleared') else ''
+        L.append(f"## 昨天新增的错题（{sum(g['n'] for g in nw)} 道 / {len(nw)} 类）")
+        L.append('')
+        L.append(f"和 {wd['prev']} 的错题本对比得出{extra}。同类只讲一道。")
+        L.append('')
+        for g in nw[:6]:
+            q = g['rep'] or {}
+            L.append(f"### {g['kind']}（{g['n']} 道）")
+            L.append('')
+            if q.get('stem'):
+                L.append(f"> {q['stem']}")
+                if q.get('options'):
+                    L.append('> ' + '　'.join(f"{o.get('k')}.{o.get('t')}" for o in q['options'] if o.get('k')))
+                L.append('')
+            meta = []
+            if q.get('answer'):
+                meta.append(f"正确答案 {q['answer']}")
+            if q.get('siteAcc'):
+                meta.append(f"全站正确率 {q['siteAcc']}%")
+            if meta:
+                L.append('　'.join(meta))
+                L.append('')
+            m = _method_for(g['kind'], g['module'])
+            if m:
+                L.append('**这一类的方法**')
+                for x in m['must'][:2]:
+                    L.append(f'- {x}')
+                L.append('')
+        if len(nw) > 6:
+            rest = nw[6:]
+            L.append(f"其余 {len(rest)} 类（" + '、'.join(f'{x["kind"]} {x["n"]}' for x in rest[:6])
+                     + ('…' if len(rest) > 6 else '') + '）方法同上，不再展开。')
+            L.append('')
+    elif wd.get('prev'):
+        L.append('## 错题')
+        L.append('')
+        L.append(f"和 {wd['prev']} 相比没有新增错题"
+                 + (f"，还清掉了 {wd['cleared']} 道。" if wd.get('cleared') else '，也没清掉旧的。'))
+        L.append('')
+
+    wg = [] if (wd.get('prev') and nw) else (r.get('wrong_groups') or [])
     if wg:
         L.append(f'## 错题复盘（{len(wg)} 类 / {sum(g["n"] for g in wg)} 道）')
         L.append('')
         L.append('同一类只讲一道，其余同类题错因相同。')
         L.append('')
-        for g in wg:
+        for g in wg[:6]:
             q = g['rep'] or {}
             L.append(f"### {g['kind']}（{g['n']} 道）")
             L.append('')
@@ -479,6 +576,11 @@ def render(r, tips) -> str:
                 for x in m['must'][:3]:
                     L.append(f'- {x}')
                 L.append('')
+        if len(wg) > 6:
+            rest = wg[6:]
+            L.append(f"其余 {len(rest)} 类（" + '、'.join(f'{x["kind"]} {x["n"]}' for x in rest[:6])
+                     + ('…' if len(rest) > 6 else '') + '）不再展开。')
+            L.append('')
 
     w = [] if wg else (r.get('wrongs') or [])
     if w:
@@ -521,7 +623,7 @@ def main() -> int:
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--date', default=dt.date.today().isoformat())
     ap.add_argument('--papers', type=int, default=6, help='逐题抓取最近几份练习')
-    ap.add_argument('--wrong-topics', type=int, default=8, help='错题本最多抓几个子题型')
+    ap.add_argument('--wrong-topics', type=int, default=6, help='错题本抓几个分组（6 = 六个模块，覆盖全部）')
     args = ap.parse_args()
 
     init_db()
@@ -556,7 +658,13 @@ def main() -> int:
     r['wrongs'] = wrongs_by_topic((dt.date.fromisoformat(date) - dt.timedelta(days=1)).isoformat()) \
         or wrongs_by_topic(date)
     if not args.no_fetch:
-        r['wrong_groups'] = group_wrongs(fetch_wrongs(args.wrong_topics))
+        wtopics = fetch_wrongs(args.wrong_topics)
+        if wtopics:
+            save_wrongs(date, wtopics)
+        wdiff = diff_wrongs(date)
+        r['wrong_diff'] = wdiff
+        r['new_wrongs'] = group_new_wrongs(wdiff.get('new') or [])
+        r['wrong_groups'] = group_wrongs(wtopics) if wtopics else []
 
     if args.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))
