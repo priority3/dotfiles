@@ -617,6 +617,21 @@ def render(r, tips) -> str:
     return '\n'.join(L)
 
 
+def publish(text: str, date: str) -> bool:
+    """把日报发到站点 /daily/，失败不影响本地输出"""
+    try:
+        r = subprocess.run([sys.executable, str(HERE / 'publish.py'), '--date', date],
+                           input=text, text=True, capture_output=True, timeout=180)
+        if r.returncode != 0:
+            print(f'发布失败：{(r.stderr or "")[-200:]}', file=sys.stderr)
+            return False
+        print(f'已发布：https://shengkao.razet.me/daily/{date}.html', file=sys.stderr)
+        return True
+    except Exception as e:
+        print(f'发布异常：{e}', file=sys.stderr)
+        return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--no-fetch', action='store_true')
@@ -624,6 +639,7 @@ def main() -> int:
     ap.add_argument('--date', default=dt.date.today().isoformat())
     ap.add_argument('--papers', type=int, default=6, help='逐题抓取最近几份练习')
     ap.add_argument('--wrong-topics', type=int, default=6, help='错题本抓几个分组（6 = 六个模块，覆盖全部）')
+    ap.add_argument('--publish', action='store_true', help='发布到 shengkao.razet.me/daily/')
     args = ap.parse_args()
 
     init_db()
@@ -666,10 +682,13 @@ def main() -> int:
         r['new_wrongs'] = group_new_wrongs(wdiff.get('new') or [])
         r['wrong_groups'] = group_wrongs(wtopics) if wtopics else []
 
+    text = render(r, advice(r, lectures))
     if args.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))
     else:
-        print(render(r, advice(r, lectures)))
+        print(text)
+        if args.publish:
+            publish(text, date)
     return 0
 
 

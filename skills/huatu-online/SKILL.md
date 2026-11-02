@@ -114,6 +114,21 @@ python3 scripts/huatu_daily.py --no-fetch --date 2026-10-30   # 用已有快照�
 
 **为什么不全量逐题讲**：一天新增错题常 20 道，逐题讲 1600 字没人读；同类错因相同，讲一道等于讲一类。
 
+## 跨设备查看日报（publish.py）
+
+日报默认只在本机终端输出。要换电脑/手机看，发布成静态页：
+
+```bash
+python3 scripts/huatu_daily.py --papers 5 --publish   # 生成 + 发布
+python3 scripts/publish.py --rebuild-index            # 只重建索引
+```
+
+- 输出到 `https://shengkao.razet.me/daily/`（索引页列出最近 60 期，按日期倒序）
+- 本地归档在 `~/.workbuddy/data/daily_pages/<date>.html`
+- 发布方式：rsync 到 `root@47.115.163.124:/var/www/shengkao/daily`，用 `~/.ssh/server/work-m1-connect.pem`
+- Markdown → HTML 是自己实现的极简渲染（标题/表格/列表/引用/粗体/代码），样式适配手机，无外部依赖
+- 抓取必须在**本机**跑（依赖 Chrome 登录态），发布只是把结果推上去，所以换设备看的是静态页，不是实时数据
+
 ### 错题本抓取（run.sh wrongs）
 
 错题重练页是**三层折叠结构**，必须展开才能拿到题目：
