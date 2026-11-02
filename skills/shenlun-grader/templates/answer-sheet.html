@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>申论答题卡格子示例</title>
+<style>
+  :root{
+    --bg:#fbfaf7;--surface:#fff;--line:#d9d3c8;--grid:#e3ddd2;--text:#2b2b28;
+    --text-2:#5c5a54;--accent:#3f6b4f;--warn:#b4553f;--fill:#f4f1ea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC",sans-serif}
+  .wrap{max-width:940px;margin:0 auto;padding:26px 20px 70px}
+  h1{font-size:21px;margin:6px 0 6px}
+  .lead{color:var(--text-2);font-size:14px;margin:0 0 22px}
+  h2{font-size:16px;margin:34px 0 6px;padding-left:10px;border-left:3px solid var(--accent)}
+  .note{color:var(--text-2);font-size:13.5px;margin:6px 0 14px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 16px 12px;margin:12px 0;overflow-x:auto}
+  table.grid{border-collapse:collapse;font-size:15px;font-family:"Kaiti SC","STKaiti","PingFang SC",serif}
+  table.grid td,table.grid th{border:1px solid var(--grid);width:22px;height:24px;text-align:center;
+                              padding:0;line-height:24px;color:var(--text)}
+  table.grid th{background:var(--fill);color:var(--text-2);font-size:11px;font-weight:400;border:none;padding-right:6px;width:auto}
+  td.empty{background:#fcfbf8}
+  td.tag{background:#fff4ee;color:var(--warn);font-size:10px}
+  td.para{background:#f0f5f0}
+  .rowtag{color:var(--text-2);font-size:12px;white-space:nowrap;padding-left:8px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--text-2);margin-top:10px}
+  .legend i{display:inline-block;width:14px;height:14px;border:1px solid var(--grid);vertical-align:-2px;margin-right:5px;border-radius:2px}
+  .k{color:var(--warn);font-weight:600}
+  .ok{color:var(--accent);font-weight:600}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--text-2);margin:10px 0 0}
+  .bar span{background:var(--fill);border-radius:999px;padding:4px 12px}
+  ul{padding-left:20px;margin:8px 0}
+  li{margin:5px 0}
+  code{background:var(--fill);padding:1px 5px;border-radius:4px;font-size:13px}
+  @media print{
+    body{background:#fff}
+    .wrap{max-width:none;padding:0}
+    h2{page-break-after:avoid}
+    .card{border:none;padding:0;margin:8px 0 22px;overflow:visible}
+    table.grid td,table.grid th{border-color:#bbb}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>申论答题卡 · 格子示例</h1>
+  <p class="lead">四川省考答题卡每行 25 格。350 字 = 14 行；250 字 = 10 行；450 字 = 18 行。下面两种格式都是常考文种，对着练。</p>
+
+  <h2>一、工作简报（政务公文：无称谓、无落款）</h2>
+  <p class="note">机关＋日期写在<span class="k">开头第一行</span>，标题在<span class="k">第二行居中</span>。结尾不要写落款——这是最容易多加的两处。</p>
+  <div class="card">
+    <div id="grid-a"></div>
+    <div class="legend">
+      <span><i style="background:#fff4ee"></i>格式要素（机关/日期/标题）</span>
+      <span><i style="background:#f0f5f0"></i>段首空两格</span>
+      <span><i></i>正文格子</span>
+    </div>
+    <div class="bar">
+      <span>共 14 行 × 25 格 = 350 字上限</span>
+      <span>格式占 2 行</span>
+      <span>背景 3 行 / 做法 6 行 / 成效 3 行</span>
+    </div>
+  </div>
+
+  <h2>二、倡议书（有称谓、有落款）</h2>
+  <p class="note">标题居中 → <span class="k">称谓顶格</span>（不缩进）→ 正文空两格 → <span class="k">落款右空四格</span>，机关在上、日期在下。</p>
+  <div class="card">
+    <div id="grid-b"></div>
+    <div class="legend">
+      <span><i style="background:#fff4ee"></i>称谓 / 落款（顶格与右空四格）</span>
+      <span><i style="background:#f0f5f0"></i>段首空两格</span>
+    </div>
+    <div class="bar">
+      <span>250 字题 = 10 行；本题 350 字 = 14 行</span>
+      <span>落款吃掉 2 行</span>
+    </div>
+  </div>
+
+  <h2>三、怎么用这张纸</h2>
+  <ul>
+    <li><strong>先数空格再动笔</strong>：350 字题先划出 14 行，格式占 2 行，正文只剩 12 行。</li>
+    <li><strong>标题不用写满</strong>：17 个字的标题放在 25 格里，左右各省 4 格，居中即可。</li>
+    <li><strong>段首空两格是硬规矩</strong>：阅卷老师一眼看到缩进，就知道你分了几段。</li>
+    <li><strong>落款只占最后两行</strong>：机关名从右边第 5 格开始写（右空四格），日期在它下方居中。</li>
+    <li><strong>超字数是硬扣分</strong>：超 30–50 字扣 1 分，宁可少写一句，不要写到格子外面。</li>
+  </ul>
+  <p class="note">打印建议：A4 纵向、缩放 100%，可直接当答题纸用。</p>
+</div>
+
+<script>
+// 每行 25 格；null 表示空格；{t:'文字'} 普通填充；{t:'', cls:'tag'} 标注格
+const COLS = 25;
+
+function render(el, rows, opts = {}) {
+  const table = document.createElement('table');
+  table.className = 'grid';
+  rows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.textContent = (idx + 1);
+    tr.appendChild(th);
+    for (let c = 0; c < COLS; c++) {
+      const td = document.createElement('td');
+      const cell = row[c];
+      if (cell && typeof cell === 'object') {
+        td.textContent = cell.t || '';
+        if (cell.cls) td.className = cell.cls;
+      } else if (cell) {
+        td.textContent = cell;
+      } else {
+        td.className = 'empty';
+      }
+      tr.appendChild(td);
+    }
+    // 行尾说明
+    const tagTd = document.createElement('td');
+    tagTd.className = 'rowtag';
+    tagTd.textContent = (row.tag || '');
+    tr.appendChild(tagTd);
+    table.appendChild(tr);
+  });
+  el.appendChild(table);
+}
+
+// 把字符串按格铺开，支持前导全角空格
+function line(str, cls) {
+  const arr = [];
+  for (const ch of str) arr.push({ t: ch === '　' ? '' : ch, cls: ch === '　' ? 'para' : (cls || '') });
+  return arr;
+}
+function blank(n = COLS) { return new Array(n).fill(null); }
+
+// ===== 工具：按格对齐 =====
+const E = () => ({ t: '', cls: 'empty' });
+function padRow(arr) {              // 补满 25 格
+  while (arr.length < COLS) arr.push(E());
+  return arr.slice(0, COLS);
+}
+function leftText(str) { return padRow(line(str)); }
+function centerText(str, cls = 'tag') {   // 居中
+  const arr = [];
+  const left = Math.floor((COLS - [...str].length) / 2);
+  for (let i = 0; i < left; i++) arr.push(E());
+  arr.push(...line(str, cls));
+  return padRow(arr);
+}
+function rightText(str, endCol = COLS, cls = 'tag') {  // 文字末格落在 endCol
+  const len = [...str].length;
+  const start = endCol - len;          // 0-based 起始索引
+  const arr = [];
+  for (let i = 0; i < start; i++) arr.push(E());
+  arr.push(...line(str, cls));
+  return padRow(arr);
+}
+
+// ===== 示例一：工作简报 =====
+const a = [];
+// 第 1 行：机关在左，日期靠右
+let r1 = leftText('S镇人民政府');
+const dateStr = '2026年11月2日';
+line(dateStr).forEach((c, i) => { r1[COLS - [...dateStr].length + i] = c; });
+r1.forEach(c => { if (c.t) c.cls = 'tag'; });
+r1.tag = '机关+日期（日期靠右）';
+a.push(r1);
+
+// 第 2 行：标题居中
+const t2 = centerText('S镇乡村人才回引工作情况简报');
+t2.tag = '标题居中';
+a.push(t2);
+
+a.push(padRow([]).map(E));
+const bgRow = leftText('　　近年来，我镇青壮年外流、村级组织后继乏人。');
+bgRow.tag = '背景 3 行';
+a.push(bgRow);
+a.push(leftText('为破解这一难题，我镇实施乡村人才回引工程。'));
+a.push(padRow([]).map(E));
+for (let i = 0; i < 6; i++) {
+  const row = leftText('　　（做法：一、二、三、四、五）');
+  if (i === 0) row.tag = '做法 6 行';
+  a.push(row);
+}
+for (let i = 0; i < 3; i++) {
+  const row = leftText('　　（成效：数据转述，不堆数字）');
+  if (i === 0) row.tag = '成效 3 行';
+  if (i === 2) row.tag = '结尾不写落款';
+  a.push(row);
+}
+
+// ===== 示例二：倡议书 =====
+const b = [];
+const b1 = centerText('文明出行倡议书');
+b1.tag = '标题居中';
+b.push(b1);
+
+const b2 = leftText('各位市民朋友们：');   // 顶格
+b2.forEach(c => { if (c.t) c.cls = 'tag'; });
+b2.tag = '称谓顶格';
+b.push(b2);
+
+b.push(padRow([]).map(E));
+b.push(leftText('　　近年来，我市交通流量快速增长，出行中的'));
+b.push(leftText('不文明行为时有发生。为此，我们向全体市民发出'));
+b.push(leftText('如下倡议：'));
+for (let i = 0; i < 4; i++) {
+  const row = leftText('　　一、（倡议内容：材料里没有现成句，自己组织）');
+  if (i === 0) row.tag = '倡议 4 条';
+  b.push(row);
+}
+b.push(leftText('　　让我们携手同行，共建文明之城。'));
+b.push(padRow([]).map(E));
+const s1 = rightText('XX市文明办', COLS - 4);   // 右空四格
+s1.tag = '机关右空四格';
+b.push(s1);
+const s2 = rightText('2026年11月2日', COLS - 4);
+s2.tag = '日期在机关下方';
+b.push(s2);
+
+render(document.getElementById('grid-a'), a);
+render(document.getElementById('grid-b'), b);
+</script>
+</body>
+</html>
