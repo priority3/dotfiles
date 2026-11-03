@@ -171,7 +171,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 15:16</span>
+    <span class="build">构建 11-03 15:28</span>
   </div>
 
   <div class="paper" id="paper"></div>
@@ -536,6 +536,8 @@ function cleanIme(str) {
 }
 
 let compBase = '';
+sink.addEventListener('blur', () => { composing = false; });
+
 sink.addEventListener('compositionstart', () => {
   composing = true;
   compBase = sink.value;
@@ -551,8 +553,10 @@ sink.addEventListener('compositionend', (e) => {
   focusSink();
 });
 sink.addEventListener('input', (e) => {
-  // 以浏览器给的 isComposing 为准，避免标志卡死导致后面所有输入被吞
-  if (e.isComposing === true) return;
+  // 组合还没结束（拼音在屏幕上），一律不接收：
+  // 有些输入法在拼音中按退格只发普通 input，不标 isComposing，
+  // 收下来就会把拼音字母写进格子
+  if (composing || e.isComposing === true) return;
   composing = false;
   const v = sink.value;
   if (!v) return;
@@ -562,6 +566,9 @@ sink.addEventListener('input', (e) => {
   sink.value = '';
 });
 sink.addEventListener('keydown', (e) => {
+  // 输入法正在组合（拼音未上屏）时，退格/回车/方向键都是给输入法用的，
+  // 拦下来就会变成「打拼音按退格，格子里的字被删掉」
+  if (e.isComposing || composing || e.keyCode === 229) return;
   if (e.key === 'Enter') {
     e.preventDefault();
     append('\n');

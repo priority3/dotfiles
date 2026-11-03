@@ -66,6 +66,35 @@ const check=(n,c,d)=>{if(c){pass++;console.log('  ✓ '+n);}else{fail++;console.
   await new Promise(r=>setTimeout(r,150));
   check('选词后正常上屏', (await txt())==='月', 'text='+JSON.stringify(await txt()));
 
+  // 拼音组合中按退格 / Delete / 回车：都不能动格子里的字（按真实时序模拟）
+  await ev(`SheetAPI.setText('我镇主要经济')`);
+  await ev(`document.getElementById('sink').focus()`);
+  const imeKey = async (k, code, vk) => {
+    await send('Input.dispatchKeyEvent',{type:'keyDown',key:k,code,windowsVirtualKeyCode:vk,nativeVirtualKeyCode:vk,isComposing:true});
+    // 输入法内部把拼音串删掉一个字母，并派发 isComposing 的 input
+    await ev(`(()=>{const s=document.getElementById('sink');
+      s.value='zh';
+      s.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true,data:null,inputType:'deleteContentBackward'}));})()`);
+    await send('Input.dispatchKeyEvent',{type:'keyUp',key:k,code,windowsVirtualKeyCode:vk,nativeVirtualKeyCode:vk});
+    await new Promise(r=>setTimeout(r,120));
+  };
+  await ev(`(()=>{const s=document.getElementById('sink');
+    s.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));s.value='zhu';})()`);
+  await imeKey('Backspace','Backspace',8);
+  check('拼音组合中按退格不删格子里的字', (await txt())==='我镇主要经济', 'text='+JSON.stringify(await txt()));
+  await imeKey('Delete','Delete',46);
+  check('拼音组合中按 Delete 不删字', (await txt())==='我镇主要经济', 'text='+JSON.stringify(await txt()));
+  await imeKey('Enter','Enter',13);
+  check('拼音组合中按回车不换行', (await txt())==='我镇主要经济', 'text='+JSON.stringify(await txt()));
+  await imeKey('ArrowLeft','ArrowLeft',37);
+  check('拼音组合中按方向键不动光标', (await ev('SheetAPI.getCaret()'))===6, 'caret='+await ev('SheetAPI.getCaret()'));
+  await ev(`(()=>{const s=document.getElementById('sink');s.value='';
+    s.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'柱'}));})()`);
+  await new Promise(r=>setTimeout(r,150));
+  check('上屏只追加「柱」一个字', (await txt())==='我镇主要经济柱', 'text='+JSON.stringify(await txt()));
+  await key('Backspace','Backspace',8);
+  check('组合结束后退格正常', (await txt())==='我镇主要经济', 'text='+JSON.stringify(await txt()));
+
   check('无 JS 异常', errs.length===0, errs[0]);
   console.log(`\n${pass} 通过 / ${fail} 失败`);
   ws.close(); process.exit(fail?1:0);
