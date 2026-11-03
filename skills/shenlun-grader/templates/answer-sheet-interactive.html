@@ -44,7 +44,8 @@
   table.sheet td{border:1px solid var(--grid);width:26px;height:28px;text-align:center;line-height:28px;
                  font-size:16px;color:var(--text);padding:0}
   table.sheet td.cur{background:#eef4ef;box-shadow:inset 0 0 0 2px var(--accent)}
-  table.sheet td.pad{background:#fbf9f4}
+  table.sheet td.pad{background:var(--surface)}       /* 空白格也是白底，和内容格一致 */
+  table.sheet td{cursor:text}                         /* 整格可点，给个可编辑的指针 */
   table.sheet tr.over td{background:#fdf3ef}
   table.sheet tr.over td.no{color:var(--warn)}
   table.sheet td.title{font-weight:600}
@@ -170,7 +171,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 14:33</span>
+    <span class="build">构建 11-03 14:37</span>
   </div>
 
   <div class="paper" id="paper"></div>
