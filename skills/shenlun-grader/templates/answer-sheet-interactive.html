@@ -170,7 +170,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 14:30</span>
+    <span class="build">构建 11-03 14:33</span>
   </div>
 
   <div class="paper" id="paper"></div>
@@ -202,6 +202,7 @@ const paper = $('paper'), sink = $('sink');
 
 let text = localStorage.getItem('shenlun_sheet_text') || '';
 let caret = text.length;          // 光标：字符下标（不是格子下标）
+let pendingCell = null;           // 点了空白格：等真正输入时才补空格
 let locked = false;
 // 数字合并：连续数字算一格（"13" 一格），中间加空格则分开（"1 3" 三格）
 let mergeDigits = localStorage.getItem('shenlun_sheet_merge') !== '0';
@@ -294,8 +295,34 @@ function caretTokenPos(rows, pos) {
   return { row: last, col: (rows[last] || []).length, idx };
 }
 
+/* 任意格子定位：先算出落点与需要补的空白格，不立刻改文本 */
+function planCell(r, c) {
+  const lines = linesOf(text);
+  let rowBase = 0, lineStart = 0;
+  for (let li = 0; li < lines.length; li += 1) {
+    const toks = tokenizeLine(lines[li], lineStart);
+    const rowsThisLine = Math.max(1, Math.ceil(toks.length / COLS));
+    if (r < rowBase + rowsThisLine) {
+      const idx = (r - rowBase) * COLS + c;
+      if (idx < toks.length) return { pos: toks[idx].s, pad: 0, extraRows: 0 };
+      const lineEnd = lineStart + lines[li].length;
+      return { pos: lineEnd, pad: Math.max(0, idx - toks.length), extraRows: 0 };
+    }
+    rowBase += rowsThisLine;
+    lineStart += lines[li].length + 1;
+  }
+  return { pos: text.length, pad: c, extraRows: r - rowBase + 1 };
+}
+
+function applyPlan(pl) {
+  if (pl.extraRows) text += '\n'.repeat(pl.extraRows);
+  if (pl.pad) text += '\u3000'.repeat(pl.pad);
+  return text.length;
+}
+
 /* 上下左右 / Home / End */
 function moveCaret(key) {
+  pendingCell = null;
   const { rows, starts } = computeLayout(text);
   const p = caretTokenPos(rows, caret);
   if (key === 'ArrowLeft') { caret = Math.max(0, caret - 1); }
@@ -334,6 +361,7 @@ function render() {
   // 光标位置跟着 caret 走，不再固定在末尾
   const cellPos = caretCell(rows, caret);
   let cursorRow = cellPos.row, cursorCol = cellPos.col;
+  if (pendingCell) { cursorRow = pendingCell.r; cursorCol = pendingCell.c; }
   if (cursorCol >= COLS) { cursorRow += 1; cursorCol = 0; }
 
   let html = '<table class="sheet"><tbody>';
@@ -380,6 +408,10 @@ function render() {
 function append(str) {
   if (!str) return;
   if (locked) return;
+  if (pendingCell) {                    // 真开始输入了，才把落点前的空白格补出来
+    caret = applyPlan(planCell(pendingCell.r, pendingCell.c));
+    pendingCell = null;
+  }
   // 换行统一处理：段首自动空两格
   const parts = String(str).split('\n');
   let ins = '';
@@ -394,6 +426,7 @@ function append(str) {
 
 function backspace() {
   if (locked) return;
+  pendingCell = null;
   if (caret <= 0) return;
   text = text.slice(0, caret - 1) + text.slice(caret);
   caret -= 1;
@@ -483,11 +516,10 @@ paper.addEventListener('click', (e) => {
   const td = e.target.closest('td');
   if (td && td.dataset && td.dataset.r !== undefined) {
     const r = +td.dataset.r, c = +td.dataset.c;
-    const { rows, starts } = computeLayout(text);
-    const row = rows[r];
-    if (row && row[c]) caret = row[c].s;               // 点到实格：落在该格起点
-    else if (row && row.length) caret = row[row.length - 1].e;   // 点到行尾空位
-    else caret = starts[r] !== undefined ? starts[r] : text.length;
+    const pl = planCell(r, c);
+    caret = pl.pos;
+    // 落在空白格上：先只把光标放过去，等输入时再补全角空格
+    pendingCell = (pl.pad || pl.extraRows) ? { r, c } : null;
     render();
   }
   focusSink();
