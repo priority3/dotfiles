@@ -171,7 +171,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 14:50</span>
+    <span class="build">构建 11-03 14:57</span>
   </div>
 
   <div class="paper" id="paper"></div>
@@ -547,14 +547,19 @@ sink.addEventListener('keydown', (e) => {
     moveCaret(e.key, e.shiftKey);
     return;
   }
-  // 可见 ASCII（数字、字母、标点、空格）不走输入法：
-  // 输入法会把单个数字提交成「8 + 半角空格」，或者干脆吞掉，
-  // 这里直接拦下来自己上字，一次按键 = 一格，绝不多也不丢。
-  if (e.isComposing || composing) return;
+  // 只拦「数字、空格、数字后面的 . % ,」——输入法会把单个数字提交成「8 + 半角空格」或直接吞掉。
+  // 字母一律不拦：拼音的第一个字母（如 yue 的 y）拦下来就会变成「y月」。
+  if (e.isComposing || composing || e.keyCode === 229) return;   // 229 = 输入法正在处理
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key.length === 1 && /[\x20-\x7e]/.test(e.key)) {
+  const k = e.key;
+  const prev = text.slice(0, caret).slice(-1);
+  const prevDigit = /[0-9]/.test(prev);
+  const takeIt = /^[0-9]$/.test(k)              // 数字
+    || k === ' '                                 // 空格（换格键）
+    || (/^[.,:%]$/.test(k) && prevDigit);        // 数字后的小数点/百分号/千分位
+  if (takeIt) {
     e.preventDefault();
-    append(e.key);
+    append(k);
     return;
   }
 });
