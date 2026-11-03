@@ -171,7 +171,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 15:10</span>
+    <span class="build">构建 11-03 15:16</span>
   </div>
 
   <div class="paper" id="paper"></div>
@@ -248,14 +248,18 @@ function tokenizeLine(line, base) {
 function computeLayout(t) {
   const rows = [], starts = [];
   let base = 0;
-  String(t).split('\n').forEach((line) => {
+  const allLines = String(t).split('\n');
+  allLines.forEach((line, li) => {
     const toks = tokenizeLine(line, base);
     if (!toks.length) { rows.push([]); starts.push(base + line.length); }
     for (let i = 0; i < toks.length; i += COLS) {
       rows.push(toks.slice(i, i + COLS));
       starts.push(toks[i].s);
     }
-    if (toks.length && toks.length % COLS === 0) { rows.push([]); starts.push(base + line.length); }
+    // 满 25 格才补空行，而且只在最后一行补：中间行补了会在段落间留下一条假空行
+    if (toks.length && toks.length % COLS === 0 && li === allLines.length - 1) {
+      rows.push([]); starts.push(base + line.length);
+    }
     base += line.length + 1;
   });
   if (!rows.length) { rows.push([]); starts.push(0); }
@@ -302,10 +306,10 @@ function planCell(r, c) {
   let rowBase = 0, lineStart = 0;
   for (let li = 0; li < lines.length; li += 1) {
     const toks = tokenizeLine(lines[li], lineStart);
-    // 与 computeLayout 完全一致：刚好满 COLS 格时会多出一个空行，这里必须同样计数，
-    // 否则行号会整体偏移，点最后一行会被误判成「内容之外」
+    // 与 computeLayout 完全一致：满 25 格时「仅最后一行」会多出一个空行
+    const lastLine = li === lines.length - 1;
     const rowsThisLine = Math.max(1, Math.ceil(toks.length / COLS))
-      + ((toks.length && toks.length % COLS === 0) ? 1 : 0);
+      + ((toks.length && toks.length % COLS === 0 && lastLine) ? 1 : 0);
     if (r < rowBase + rowsThisLine) {
       const idx = (r - rowBase) * COLS + c;
       if (idx < toks.length) return { pos: toks[idx].s, pad: 0, extraRows: 0 };
