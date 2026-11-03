@@ -170,7 +170,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 14:22</span>
+    <span class="build">构建 11-03 14:24</span>
   </div>
 
   <div class="paper" id="paper"></div>
@@ -218,6 +218,9 @@ function tokenizeLine(line) {
   const out = [];
   let i = 0;
   while (i < chars.length) {
+    // 半角空格＝换格键：结束当前格，自己不吃格子
+    // 全角空格（U+3000）照旧占一格，用来做缩进
+    if (chars[i] === ' ') { i += 1; continue; }
     if (/[0-9]/.test(chars[i])) {
       let j = i + 1;
       while (j < chars.length) {
@@ -778,6 +781,15 @@ function applyReadonly() {
   applyReadonly();
   loadRemote().then((loaded) => {
     booted = true;
+    // 老文本里的半角空格都是缩进，一次性转全角（占格），避免切换交互后整体左移。
+    // 必须放在云端载入之后，否则会被服务器上的旧文本覆盖。
+    if (localStorage.getItem('shenlun_sheet_space_migrated') !== '1') {
+      if (/ /.test(text)) {
+        text = text.replace(/ /g, '\u3000');
+        render();                     // 顺带把迁移结果写回云端
+      }
+      localStorage.setItem('shenlun_sheet_space_migrated', '1');
+    }
     if (!loaded && REMOTE) setTimeout(() => { if ($('qbody').textContent.startsWith('（暂无题目')) loadRemote(); }, 1500);
     if (!loaded) setSync(REMOTE ? '本地草稿' : '本地模式');
     if (!READONLY) focusSink();
