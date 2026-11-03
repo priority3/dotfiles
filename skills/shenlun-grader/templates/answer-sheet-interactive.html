@@ -171,7 +171,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 14:57</span>
+    <span class="build">构建 11-03 15:10</span>
   </div>
 
   <div class="paper" id="paper"></div>
@@ -302,7 +302,10 @@ function planCell(r, c) {
   let rowBase = 0, lineStart = 0;
   for (let li = 0; li < lines.length; li += 1) {
     const toks = tokenizeLine(lines[li], lineStart);
-    const rowsThisLine = Math.max(1, Math.ceil(toks.length / COLS));
+    // 与 computeLayout 完全一致：刚好满 COLS 格时会多出一个空行，这里必须同样计数，
+    // 否则行号会整体偏移，点最后一行会被误判成「内容之外」
+    const rowsThisLine = Math.max(1, Math.ceil(toks.length / COLS))
+      + ((toks.length && toks.length % COLS === 0) ? 1 : 0);
     if (r < rowBase + rowsThisLine) {
       const idx = (r - rowBase) * COLS + c;
       if (idx < toks.length) return { pos: toks[idx].s, pad: 0, extraRows: 0 };
@@ -325,6 +328,12 @@ function applyPlan(pl) {
     pos += pad.length;
   }
   return pos;
+}
+
+/* 点到内容下面很远时，吸附到内容下方第一行，避免凭空补出多行 */
+function clampRow(r) {
+  const { rows } = computeLayout(text);
+  return Math.min(r, rows.length);
 }
 
 /* 当前光标所在格（可能是还没写字的空白格） */
@@ -354,6 +363,8 @@ function gotoCell(r, c) {
   if (r < 0 || c < 0) return;
   if (c >= COLS) { r += 1; c = 0; }
   const { rows } = computeLayout(text);
+  r = clampRow(r);
+  if (c >= COLS) { r += 1; c = 0; }
   const row = rows[r];
   if (row && row[c]) { caret = row[c].s; pendingCell = null; }
   else {
@@ -480,8 +491,21 @@ function backspace() {
   if (locked) return;
   pendingCell = null;
   if (caret <= 0) return;
+  // 光标前只有空白（缩进或补齐的空格）：一次清掉这一整段空白
+  const ls = text.lastIndexOf('\n', caret - 1) + 1;
+  if (caret > ls && /^[\s\u3000]+$/.test(text.slice(ls, caret))) {
+    text = text.slice(0, ls) + text.slice(caret);
+    caret = ls;
+    render();
+    return;
+  }
   text = text.slice(0, caret - 1) + text.slice(caret);
   caret -= 1;
+  // 删完若末尾只剩「只有空白的空行」，一并收掉，不用再按第二下删那个空行
+  if (caret >= text.length - 1) {
+    const trimmed = text.replace(/\n[\s\u3000]*$/, '');
+    if (trimmed !== text) { text = trimmed; caret = Math.min(caret, text.length); }
+  }
   render();
 }
 
@@ -572,7 +596,8 @@ sink.addEventListener('paste', (e) => {
 paper.addEventListener('click', (e) => {
   const td = e.target.closest('td');
   if (td && td.dataset && td.dataset.r !== undefined) {
-    const r = +td.dataset.r, c = +td.dataset.c;
+    const c = +td.dataset.c;
+    const r = clampRow(+td.dataset.r);
     const pl = planCell(r, c);
     caret = pl.pos;
     // 落在空白格上：先只把光标放过去，等输入时再补全角空格
