@@ -171,7 +171,7 @@
     <span id="leftWrap">剩余 <b id="left">350</b></span>
     <span id="timeLeft"></span>
     <span id="sync" class="sync"></span>
-    <span class="build">构建 11-03 14:48</span>
+    <span class="build">构建 11-03 14:50</span>
   </div>
 
   <div class="paper" id="paper"></div>
@@ -316,9 +316,15 @@ function planCell(r, c) {
 }
 
 function applyPlan(pl) {
-  if (pl.extraRows) text += '\n'.repeat(pl.extraRows);
-  if (pl.pad) text += '\u3000'.repeat(pl.pad);
-  return text.length;
+  let pos = pl.pos;
+  if (pl.extraRows) { text += '\n'.repeat(pl.extraRows); pos += pl.extraRows; }
+  if (pl.pad) {
+    const pad = '\u3000'.repeat(pl.pad);
+    // 关键：空白格要补在光标这一行的末尾，不是补到全文末尾
+    text = text.slice(0, pos) + pad + text.slice(pos);
+    pos += pad.length;
+  }
+  return pos;
 }
 
 /* 当前光标所在格（可能是还没写字的空白格） */
