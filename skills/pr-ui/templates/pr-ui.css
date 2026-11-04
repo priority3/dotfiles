@@ -1,6 +1,8 @@
 /* pr-ui 底座 —— 复制到项目里,给根容器加 class="pr-ui" 即可。
    无依赖、无预处理器。所有类名以 pr- 前缀,不会和现有样式打架。
-   规范说明见 ../SKILL.md,数值出处见 ../references/design-tokens.md */
+   通用元件:画布/面/毛玻璃/输入区/字阶/列表行/按钮/表格/空态/标签/KPI/可勾选条目。
+   规范说明见 ../SKILL.md,数值出处见 ../references/design-tokens.md,
+   各形态怎么用见 ../references/surfaces.md */
 
 .pr-ui {
   /* 中性底座:层级靠留白与字号,不靠色块 */
@@ -13,7 +15,7 @@
   --pr-line: #ececee;
   --pr-line-strong: #e0e0e3;
   --pr-sel: #f0f0f2;
-  --pr-card: #f4f4f5;          /* 用户消息小卡 */
+  --pr-card: #f4f4f5;          /* 浅底:气泡、行内卡片、代码块 */
   --pr-accent: #a3e635;        /* 唯一强调色,只表状态 */
   --pr-accent-ink: #1a2e05;
   --pr-danger: #d92d20;
@@ -93,6 +95,7 @@
                     font-variant-numeric: tabular-nums; letter-spacing: .2px; }
 .pr-ui .pr-num    { font-variant-numeric: tabular-nums; }
 
+/* 对话气泡 —— 只在做对话形态时才用;其余形态用 .pr-row / 裸文本 */
 .pr-ui .pr-user-msg {
   background: var(--pr-card);
   border-radius: 12px;
@@ -154,6 +157,152 @@
   background: var(--pr-accent);
   display: inline-block;
 }
+
+/* ---------- 列表:用线分隔,不用卡片 ---------- */
+.pr-ui .pr-list { display: flex; flex-direction: column; }
+
+.pr-ui .pr-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--pr-line);
+  border-radius: 0;
+  text-align: left;
+  color: var(--pr-text);
+  background: none;
+  font: inherit;
+  width: 100%;
+  transition: background-color .18s;
+}
+.pr-ui .pr-row:last-child { border-bottom: 0; }
+.pr-ui a.pr-row:hover, .pr-ui button.pr-row:hover { background: var(--pr-sel); }
+.pr-ui .pr-row:active { background: var(--pr-sel); }
+.pr-ui .pr-row-main { flex: 1; min-width: 0; }
+.pr-ui .pr-row-main > .pr-body,
+.pr-ui .pr-row-main > strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-ui .pr-row-main > .pr-sub {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--pr-text-2);
+  margin-top: 2px;
+}
+.pr-ui .pr-row-end { flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* ---------- 按钮:主按钮是深色实心,不是强调色 ---------- */
+.pr-ui .pr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--pr-line-strong);
+  border-radius: var(--pr-r-ctl);
+  background: var(--pr-bg);
+  color: var(--pr-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color .18s, border-color .18s, transform .25s var(--pr-spring);
+}
+.pr-ui .pr-btn:hover { background: var(--pr-sel); }
+.pr-ui .pr-btn:active { transform: scale(.97); }
+.pr-ui .pr-btn[disabled] { opacity: .4; pointer-events: none; }
+
+.pr-ui .pr-btn-primary {
+  background: var(--pr-text);
+  border-color: var(--pr-text);
+  color: var(--pr-bg);
+}
+.pr-ui .pr-btn-primary:hover { background: var(--pr-text); opacity: .88; }
+
+.pr-ui .pr-btn-danger { color: var(--pr-danger); border-color: var(--pr-line-strong); }
+
+/* ---------- 表格:去竖线,数字右对齐等宽 ---------- */
+.pr-ui .pr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.pr-ui .pr-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pr-text-2);
+  text-align: left;
+  padding: 0 12px 8px 0;
+  border-bottom: 1px solid var(--pr-line-strong);
+  white-space: nowrap;
+}
+.pr-ui .pr-table td {
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--pr-line);
+  color: var(--pr-text);
+}
+.pr-ui .pr-table tr:last-child td { border-bottom: 0; }
+.pr-ui .pr-table th:last-child, .pr-ui .pr-table td:last-child { padding-right: 0; }
+.pr-ui .pr-table .pr-num,
+.pr-ui .pr-table th.is-num { text-align: right; }
+.pr-ui .pr-table td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.pr-ui .pr-table .is-empty { color: var(--pr-muted); }
+
+/* 斑马纹只在长表上用,且淡到几乎看不见 */
+.pr-ui .pr-table.is-long tbody tr:nth-child(even) { background: color-mix(in srgb, var(--pr-sel) 55%, transparent); }
+
+/* ---------- 空态:一句话 + 一个动作,不给插画 ---------- */
+.pr-ui .pr-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 40px 0;
+  color: var(--pr-text-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.pr-ui .pr-empty .pr-empty-line { color: var(--pr-text); }
+
+/* ---------- 标签 / 计数 ---------- */
+.pr-ui .pr-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--pr-line-strong);
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pr-text-2);
+}
+
+/* ---------- KPI:数字第一,不要彩色底块和圆环 ---------- */
+.pr-ui .pr-kpi {
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.pr-ui .pr-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pr-muted);
+  margin-top: 4px;
+}
+
+/* ---------- 分隔 ---------- */
+.pr-ui .pr-divider { height: 1px; background: var(--pr-line); border: 0; margin: 0; }
 
 /* ---------- 按压反馈 ---------- */
 .pr-ui .pr-tap { transition: transform .25s var(--pr-spring), opacity .18s; }
