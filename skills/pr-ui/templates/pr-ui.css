@@ -7,9 +7,9 @@
   --pr-bg: #ffffff;
   --pr-canvas: #f4f4f5;
   --pr-canvas-dot: #d4d4d8;
-  --pr-text: #111114;
-  --pr-text-2: #6b6b72;
-  --pr-muted: #a3a3ac;
+  --pr-text: #111114;          /* 墨 100%  18.9:1 */
+  --pr-text-2: #545456;        /* 墨  72%   7.6:1  次级文字、标签 */
+  --pr-muted: #707072;         /* 墨  60%   4.9:1  元信息下限,再浅就读不清了 */
   --pr-line: #ececee;
   --pr-line-strong: #e0e0e3;
   --pr-sel: #f0f0f2;
@@ -41,8 +41,8 @@
     --pr-canvas: #0b0b0d;
     --pr-canvas-dot: #232327;
     --pr-text: #f2f2f4;
-    --pr-text-2: #a0a0a8;
-    --pr-muted: #6b6b73;
+    --pr-text-2: #b1b1b3;       /* 墨 72%  9.2:1 */
+    --pr-muted: #969698;        /* 墨 60%  6.7:1 */
     --pr-line: #232327;
     --pr-line-strong: #2c2c31;
     --pr-sel: #1c1c20;
